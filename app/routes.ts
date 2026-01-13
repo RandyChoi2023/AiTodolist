@@ -1,8 +1,11 @@
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
-    index("routes/home.tsx"),
-    
+    index("home.tsx"),
+    //to-do-list
+    route("to-do-lists", "features/todos/todo-list.tsx"),
+    //core-list
+    route("/my-core-list/all-lists", "features/cores/core-list.tsx"),
     // Auth
     // route("login", "routes/login.tsx"),
     // route("signup", "routes/signup.tsx"),
