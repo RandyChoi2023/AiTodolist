@@ -6,6 +6,7 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 
+import { v4 as uuidv4 } from "uuid";
 
 import { Button } from "~/common/components/ui/button";
 import { Input } from "~/common/components/ui/input";
@@ -72,7 +73,7 @@ function priorityBadgeColor(p: Priority) {
 export default function CoreListPage() {
   const [tasks, setTasks] = React.useState<Task[]>([
     {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       title: "영어단어 10개 외우기",
       notes: "10개 외운것 12시간 지난 다음 써서 완료햐기",
       done: false,
@@ -81,7 +82,7 @@ export default function CoreListPage() {
       createdAt: Date.now() - 100000,
     },
     {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       title: "네플릭스 자막없이 시청하기 10분",
       notes: "10분동안 시청 내용중에 한 문장 써서 기록하고 완료!",
       done: false,
@@ -89,7 +90,7 @@ export default function CoreListPage() {
       createdAt: Date.now() - 50000,
     },
     {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       title: "영어 선생님하고 렌덤 체팅하기",
       notes: "체팅 후 기억나는 문장 써보기",
       done: true,
@@ -158,7 +159,7 @@ export default function CoreListPage() {
     if (!title) return;
 
     const task: Task = {
-      id: crypto.randomUUID(),
+      id: uuidv4(),
       title,
       notes: newNotes.trim() ? newNotes.trim() : undefined,
       done: false,
@@ -402,7 +403,7 @@ export default function CoreListPage() {
                   <DropdownMenuContent align="end">
                     {/* 나중에 Edit 연결 */}
                     <DropdownMenuItem onClick={() => removeTask(t.id)}>
-                      Delete
+                      삭제
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

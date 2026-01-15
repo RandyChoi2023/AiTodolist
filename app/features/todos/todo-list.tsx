@@ -5,7 +5,7 @@ import { Input } from "~/common/components/ui/input";
 import { Checkbox } from "~/common/components/ui/checkbox";
 import { Separator } from "~/common/components/ui/separator";
 import { cn } from "~/lib/utils";
-
+import { v4 as uuidv4 } from "uuid";
 type Item = {
   id: string;
   text: string;
@@ -16,8 +16,8 @@ type Item = {
 export default function QuickTodoPage() {
   const [text, setText] = React.useState("");
   const [items, setItems] = React.useState<Item[]>([
-    { id: crypto.randomUUID(), text: "Buy milk", done: false, createdAt: Date.now() - 2000 },
-    { id: crypto.randomUUID(), text: "Call dentist", done: true, createdAt: Date.now() - 1000 },
+    { id: uuidv4(), text: "영어공부 1시간", done: false, createdAt: Date.now() - 2000 },
+    { id: uuidv4(), text: "우유랑 치약 사기", done: true, createdAt: Date.now() - 1000 },
   ]);
   const [hideDone, setHideDone] = React.useState(false);
 
@@ -32,8 +32,8 @@ export default function QuickTodoPage() {
     if (!v) return;
 
     setItems((prev) => [
-      { id: crypto.randomUUID(), text: v, done: false, createdAt: Date.now() },
-      ...prev,
+      { id: uuidv4(), text: v, done: false, createdAt: Date.now() },
+      ...prev, 
     ]);
     setText("");
   }
@@ -73,13 +73,13 @@ export default function QuickTodoPage() {
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Add a task…"
+            placeholder="To-do를 작성해주세요."
             onKeyDown={(e) => {
               if (e.key === "Enter") addItem();
             }}
           />
           <Button onClick={addItem} disabled={!text.trim()}>
-            Add
+            추가
           </Button>
         </div>
 
@@ -89,7 +89,7 @@ export default function QuickTodoPage() {
             className="text-sm text-muted-foreground hover:text-foreground"
             onClick={() => setHideDone((v) => !v)}
           >
-            {hideDone ? "Show completed" : "Hide completed"}
+            {hideDone ? "완료 된 목록 보기" : "숨기기"}
           </button>
 
           <Button
@@ -98,7 +98,7 @@ export default function QuickTodoPage() {
             onClick={clearDone}
             disabled={doneCount === 0}
           >
-            Clear done
+            완료된 목록 삭제
           </Button>
         </div>
 
@@ -137,7 +137,7 @@ export default function QuickTodoPage() {
                   size="sm"
                   onClick={() => remove(i.id)}
                 >
-                  Delete
+                  삭제
                 </Button>
               </div>
             ))

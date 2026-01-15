@@ -2,6 +2,8 @@ import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
 export default [
     index("home.tsx"),
+    //goals
+    route("goals", "features/goals/goals-list.tsx"),
     //to-do-list
     route("to-do-lists", "features/todos/todo-list.tsx"),
     //core-list
@@ -15,7 +17,7 @@ export default [
     // route("to-do-list/:userid", "routes/todo-list.tsx"),
     // route("history/:userid", "routes/history.tsx"),
     // route("profile/:userid", "routes/profile.tsx"),
-    // route("reports/:userid", "routes/reports.tsx"),
+    // route("reports/:userid", "routes/repㅊㅊㅍㄹㅎㅎorts.tsx"),
 
     // Admin
     // route("users", "routes/admin.tsx"),

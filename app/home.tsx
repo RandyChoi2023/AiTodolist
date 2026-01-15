@@ -3,7 +3,7 @@ import type { Route } from "./+types/home";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "AI Todo List" },
+    { title: "Home | AI Todo List" },
     { name: "description", content: "Welcome to AI Todo List!" },
   ];
 }
