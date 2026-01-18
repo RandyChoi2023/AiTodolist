@@ -44,6 +44,10 @@ const menus = [
             },
         ],
     },
+    {   
+        name: "Motivation",
+        to: "/motivation"
+    },
 ]
 export default function Navigation({
     isLoggedIn, hasNotifications, hasMessages

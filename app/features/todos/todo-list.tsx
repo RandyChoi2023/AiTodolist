@@ -73,7 +73,7 @@ export default function QuickTodoPage() {
           <Input
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="To-do를 작성해주세요."
+            placeholder="할 수 있는 To-do를 작성해주세요."
             onKeyDown={(e) => {
               if (e.key === "Enter") addItem();
             }}

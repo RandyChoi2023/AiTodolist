@@ -157,7 +157,7 @@ export default function GoalsListPage() {
           <Input
             value={why}
             onChange={(e) => setWhy(e.target.value)}
-            placeholder="그 목표가 너한테 중요한 이유는 뭐야? (선택)"
+            placeholder="이 목표가 너한테 중요한 이유는 뭐야? (선택)"
           />
           <div className="flex gap-2">
             <Input
@@ -273,9 +273,9 @@ export default function GoalsListPage() {
                       size="sm"
                       onClick={() => openRecommendedTodos(g.id)}
                       disabled={isDone}
-                      title={isDone ? "완료된 목표는 추천이 필요 없을 수 있어" : "AI가 목표 기반으로 To-do를 추천해줘"}
+                      title={isDone ? "목표가 달성 되었어요!" : "AI가 할 일 정리해줘요"}
                     >
-                      AI가 To-do 리스트 만들어주기
+                      AI가 할 일 정리해줘요
                     </Button>
 
                     <Button variant="ghost" size="sm" onClick={() => remove(g.id)}>

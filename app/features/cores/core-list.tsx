@@ -35,6 +35,7 @@ import {
   DropdownMenuTrigger,
 } from "~/common/components/ui/dropdown-menu";
 
+
 type Priority = "low" | "medium" | "high";
 type StatusFilter = "all" | "active" | "done";
 type SortKey = "created" | "due" | "priority";
@@ -54,6 +55,7 @@ const priorityLabel: Record<Priority, string> = {
   medium: "Medium",
   high: "High",
 };
+
 
 function priorityBadgeColor(p: Priority) {
   // shadcn Badge는 기본 variant만 있지만 class로 충분히 표현 가능
