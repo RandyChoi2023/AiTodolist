@@ -8,16 +8,21 @@ export default [
     //to-do-list
     route("to-do-lists", "features/todos/todo-list.tsx"),
     //core-list
-    route("/my-core-list/all-lists", "features/cores/core-list.tsx"),
-
+    ...prefix("/my-core-list", [
+        route("/all-lists", "features/cores/core-list.tsx"),
+        route("/:id/history", "features/cores/core-history.tsx"),
+        route("/easy", "features/cores/easy-page.tsx"),
+        route("/normal", "features/cores/normal-page.tsx"),
+        route("/hard", "features/cores/hard-page.tsx"),
+    ]),
     //motivation
     route("/motivation", "features/motivation/sentence-page.tsx"),
-    
+    //subscribe
+    route("subscribe", "features/subscribe/subscribe-page.tsx"),
     //report
     ...prefix("/report",[
         route("/weekly","features/report/weekly-page.tsx"),
     ]),
-    
     ...prefix("/auth",[
         layout("features/auth/layouts/auth-layout.tsx", [
             route("/login", "features/auth/pages/login-page.tsx"),
@@ -33,6 +38,24 @@ export default [
         ]),
         route("/logout","features/auth/pages/logout-page.tsx"),
     ]),
+
+    ...prefix("/my", [
+        route("/dashboard", "features/users/pages/dashboard-page.tsx"),
+        route("/profile", "features/users/pages/my-profile-page.tsx"),
+        route("/settings", "features/users/pages/settings-page.tsx"),
+        route("/notifications", "features/users/pages/notifications-page.tsx"),
+        
+        layout("features/users/layouts/message-layout.tsx", [
+            ...prefix("/messages", [
+                index("features/users/pages/messages-page.tsx"),
+                route("/:messagesId", "features/users/pages/message-page.tsx"),
+            ]),
+        ]),
+        
+    ]),
+
+    route("/users/:username","features/users/pages/profile-page.tsx"),
+    
    
     // 추후에 업데이트 아이디어 추가 예정
     // ...prefix("cores", [
@@ -54,5 +77,6 @@ export default [
     // Admin
     // route("users", "routes/admin.tsx"),
     
+    //resend email
     route("/welcome","features/users/pages/welcome-page.tsx")
 ] satisfies RouteConfig;

@@ -133,3 +133,95 @@ ALTER TABLE "profiles" ADD CONSTRAINT "profiles_profile_id_users_id_fk" FOREIGN 
 ALTER TABLE public.todo_list ADD COLUMN profile_id uuid;
 ALTER TABLE public.core_tasks ADD COLUMN profile_id uuid;
 
+-- 1) weekly_todos: 주간 체크리스트(7칸)
+create table if not exists public.weekly_todos (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+
+  title text not null,
+
+  -- 주 시작/끝 (생성일 기준 7일 윈도우로 써도 되고, 주(월~일)로 써도 됨)
+  period_start date not null,
+  period_end date not null,
+
+  -- 7개 체크박스
+  check_0 boolean not null default false,
+  check_1 boolean not null default false,
+  check_2 boolean not null default false,
+  check_3 boolean not null default false,
+  check_4 boolean not null default false,
+  check_5 boolean not null default false,
+  check_6 boolean not null default false,
+
+  promoted_to_core boolean not null default false,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists weekly_todos_user_id_idx on public.weekly_todos(user_id);
+create index if not exists weekly_todos_period_idx on public.weekly_todos(user_id, period_start, period_end);
+
+create table if not exists public.weekly_todo_history (
+  id uuid primary key default gen_random_uuid(),
+  weekly_todo_id uuid not null references public.weekly_todos(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+
+  title text not null,
+  period_start date not null,
+  period_end date not null,
+
+  checked_count int not null,
+  promoted_to_core boolean not null default false,
+
+  created_at timestamptz not null default now()
+);
+
+create index if not exists weekly_todo_history_user_id_idx on public.weekly_todo_history(user_id);
+create index if not exists weekly_todo_history_todo_idx on public.weekly_todo_history(weekly_todo_id);
+
+
+create table if not exists public.core_lists (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+
+  title text not null,
+  source_weekly_todo_id uuid references public.weekly_todos(id) on delete set null,
+
+  created_at timestamptz not null default now()
+);
+
+create index if not exists core_lists_user_id_idx on public.core_lists(user_id);
+
+alter table public.core_lists
+add column if not exists status text not null default 'active'
+check (status in ('active', 'archived'));
+
+create index if not exists core_lists_user_status_idx
+on public.core_lists(user_id, status);
+
+alter table public.weekly_todos
+add column if not exists core_list_id uuid references core_lists(id) on delete cascade;
+
+create index if not exists weekly_todos_core_list_idx
+on public.weekly_todos(core_list_id);
+
+
+alter table public.weekly_todos
+add column if not exists checks boolean[] not null default array[
+  false, false, false, false, false, false, false
+];
+
+alter table public.weekly_todos
+add column if not exists core_list_id uuid
+references public.core_lists(id)
+on delete cascade;
+
+create index if not exists weekly_todos_core_list_idx
+on public.weekly_todos(core_list_id);
+
+
+alter table public.core_lists
+add column if not exists difficulty text not null
+default 'easy'
+check (difficulty in ('easy','normal','hard'));

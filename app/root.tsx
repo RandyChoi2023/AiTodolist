@@ -61,6 +61,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
   const isLoading = navigation.state ==="loading";
   const isLoggedIn = loaderData.user !== null;
   
+  
   return (
     <div
       className={cn({
@@ -78,6 +79,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       <Outlet />
     </div>
   );
+
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

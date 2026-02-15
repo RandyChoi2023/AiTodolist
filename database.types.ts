@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      core_lists: {
+        Row: {
+          created_at: string
+          difficulty: string
+          id: string
+          source_weekly_todo_id: string | null
+          status: string
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          difficulty?: string
+          id?: string
+          source_weekly_todo_id?: string | null
+          status?: string
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          difficulty?: string
+          id?: string
+          source_weekly_todo_id?: string | null
+          status?: string
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "core_lists_source_weekly_todo_id_fkey"
+            columns: ["source_weekly_todo_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_todos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       core_tasks: {
         Row: {
           created_at: string
@@ -376,6 +414,118 @@ export type Database = {
           text?: string
         }
         Relationships: []
+      }
+      weekly_todo_history: {
+        Row: {
+          checked_count: number
+          created_at: string
+          id: string
+          period_end: string
+          period_start: string
+          promoted_to_core: boolean
+          title: string
+          user_id: string
+          weekly_todo_id: string
+        }
+        Insert: {
+          checked_count: number
+          created_at?: string
+          id?: string
+          period_end: string
+          period_start: string
+          promoted_to_core?: boolean
+          title: string
+          user_id: string
+          weekly_todo_id: string
+        }
+        Update: {
+          checked_count?: number
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          promoted_to_core?: boolean
+          title?: string
+          user_id?: string
+          weekly_todo_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_todo_history_weekly_todo_id_fkey"
+            columns: ["weekly_todo_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_todos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      weekly_todos: {
+        Row: {
+          check_0: boolean
+          check_1: boolean
+          check_2: boolean
+          check_3: boolean
+          check_4: boolean
+          check_5: boolean
+          check_6: boolean
+          checks: boolean[]
+          core_list_id: string | null
+          created_at: string
+          id: string
+          period_end: string
+          period_start: string
+          promoted_to_core: boolean
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          check_0?: boolean
+          check_1?: boolean
+          check_2?: boolean
+          check_3?: boolean
+          check_4?: boolean
+          check_5?: boolean
+          check_6?: boolean
+          checks?: boolean[]
+          core_list_id?: string | null
+          created_at?: string
+          id?: string
+          period_end: string
+          period_start: string
+          promoted_to_core?: boolean
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          check_0?: boolean
+          check_1?: boolean
+          check_2?: boolean
+          check_3?: boolean
+          check_4?: boolean
+          check_5?: boolean
+          check_6?: boolean
+          checks?: boolean[]
+          core_list_id?: string | null
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          promoted_to_core?: boolean
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_todos_core_list_id_fkey"
+            columns: ["core_list_id"]
+            isOneToOne: false
+            referencedRelation: "core_lists"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
