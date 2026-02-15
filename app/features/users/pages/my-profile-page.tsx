@@ -123,9 +123,9 @@ export default function MyProfilePage() {
               <CardContent>
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="secondary">Developer</Badge>
-                  <Badge variant="outline">Designer</Badge>
-                  <Badge variant="outline">PM</Badge>
-                  <Badge variant="outline">Founder</Badge>
+                  <Badge variant="outline">Driverr</Badge>
+                  <Badge variant="outline">Drifter</Badge>
+                  <Badge variant="outline">Dreamer</Badge>
                   <Badge variant="outline">Other</Badge>
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">

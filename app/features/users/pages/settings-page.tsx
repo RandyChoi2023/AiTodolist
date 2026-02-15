@@ -1,13 +1,28 @@
-import InputPair from "~/common/components/input-pair";
-import SelectPair from "~/common/components/select-pair";
+import * as React from "react";
 import type { Route } from "./+types/settings-page";
-import { Form } from "react-router";
-import { useMemo, useState } from "react";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
+
 import { Input } from "~/common/components/ui/input";
 import { Label } from "~/common/components/ui/label";
 import { Button } from "~/common/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "~/common/components/ui/card";
 
-// ---- Role descriptions (Die Empty-inspired) ----
+import { makeSSRClient } from "~/supa-client";
+import type { Database } from "~/supa-client";
+import { getUserProfile, updateUserProfile } from "~/features/users/queries";
+
 const ROLE_DESCRIPTIONS: Record<
   "developer" | "driver" | "drifter" | "dreamer",
   { title: string; description: string }
@@ -34,132 +49,241 @@ const ROLE_DESCRIPTIONS: Record<
   },
 };
 
+export const meta: Route.MetaFunction = () => [{ title: "Settings | AI To-Do List" }];
 
-export const meta: Route.MetaFunction = () => {
-  return [{ title: "Settings | AI todo list" }];
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
+
+export const loader = async ({ request }: Route.LoaderArgs) => {
+  const { client } = makeSSRClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+
+  if (!user) throw redirect("/auth/login");
+
+  // ✅ getUserProfile이 null을 반환할 수 있음
+  const profile = await getUserProfile(client, user.id);
+
+  // ✅ 화면에서 쓸 안전한 기본값(프로필이 없더라도 페이지는 뜨게)
+  const safeProfile: Partial<ProfileRow> = profile ?? {
+    profile_id: user.id,
+    name: "",
+    username: "",
+    bio: null,
+    avatar: null,
+    todo_style: null,
+  };
+
+  // email 같은 정보는 필요하면 여기서 같이 내려도 됨
+  return { profile: safeProfile, hasProfile: Boolean(profile) };
+};
+
+export const action = async ({ request }: Route.ActionArgs) => {
+  const { client } = makeSSRClient(request);
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+
+  if (!user) throw redirect("/auth/login");
+
+  const fd = await request.formData();
+  const intent = String(fd.get("intent") ?? "update-profile");
+
+  try {
+    if (intent !== "update-profile") {
+      return { ok: false, error: "Unsupported action." };
+    }
+
+    const name = String(fd.get("name") ?? "").trim();
+    const username = String(fd.get("username") ?? "").trim();
+    const bioRaw = String(fd.get("bio") ?? "").trim();
+    const avatar = String(fd.get("avatar") ?? "").trim();
+    const role = String(fd.get("role") ?? "").trim();
+
+    if (!name) return { ok: false, error: "Name은 필수입니다." };
+    if (!username) return { ok: false, error: "Username은 필수입니다." };
+
+    const todo_style =
+      role === "developer" ||
+      role === "driver" ||
+      role === "drifter" ||
+      role === "dreamer" ||
+      role === "other"
+        ? (role as Database["public"]["Enums"]["todo_style"] | "other")
+        : null;
+
+    const todoStyleForDb =
+      todo_style === "other"
+        ? null
+        : (todo_style as Database["public"]["Enums"]["todo_style"] | null);
+
+    // ⚠️ 프로필 row가 아예 없으면 update가 실패할 수 있음.
+    // 일단 에러를 잡아서 메시지로 보여주고 페이지는 안 죽게 함.
+    await updateUserProfile(client, user.id, {
+      name,
+      username,
+      bio: bioRaw ? bioRaw : null,
+      avatar: avatar ? avatar : null,
+      todo_style: todoStyleForDb,
+    });
+
+    return { ok: true, error: null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+  }
 };
 
 export default function SettingsPage() {
-  const [avatar, setAvatar] = useState<string | null>(null);
+  const { profile, hasProfile } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const nav = useNavigation();
+  const isSubmitting = nav.state === "submitting";
 
-  // Role state (for showing description under Select)
-  const [selectedRole, setSelectedRole] = useState<
-    "developer" | "driver" | "drifter" | "dreamer" | "other" | null
-  >(null);
+  const [selectedRole, setSelectedRole] = React.useState<
+    "developer" | "driver" | "drifter" | "dreamer" | "other" | ""
+  >(((profile as any)?.todo_style as any) ?? "");
 
-  const roleInfo = useMemo(() => {
-    if (!selectedRole) return null;
-    if (selectedRole === "other") return null;
-    return ROLE_DESCRIPTIONS[selectedRole];
-  }, [selectedRole]);
-
-  const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
-      const file = event.target.files[0];
-      setAvatar(URL.createObjectURL(file));
-    }
-  };
+  const roleInfo =
+    selectedRole && selectedRole !== "other"
+      ? ROLE_DESCRIPTIONS[selectedRole as keyof typeof ROLE_DESCRIPTIONS] ?? null
+      : null;
 
   return (
-    <div className="space-y-20">
-      <div className="grid grid-cols-6 gap-40">
-        <div className="col-span-4 flex flex-col gap-10">
-          <h2 className="text-2xl font-semibold">Edit profile</h2>
-
-          <Form className="flex flex-col w-1/2 gap-5">
-            <InputPair
-              label="Name"
-              description="Your name"
-              required
-              id="name"
-              name="name"
-              placeholder="John Doe"
-            />
-
-            <SelectPair
-              label="Role"
-              description="What role do you identify the most with"
-              name="role"
-              placeholder="Select a role"
-              options={[
-                { label: "Developer", value: "developer" },
-                { label: "Driver", value: "driver" },
-                { label: "Drifter", value: "drifter" },
-                { label: "Dreamer", value: "dreamer" },
-                { label: "Other", value: "other" },
-              ]}
-              // ✅ IMPORTANT: SelectPair must support this prop
-              onValueChange={(value) =>
-                setSelectedRole(
-                  (value as
-                    | "developer"
-                    | "driver"
-                    | "drifter"
-                    | "dreamer"
-                    | "other") ?? null
-                )
-              }
-            />
-
-            {/* ✅ Role description 바로 아래 */}
-            {selectedRole ? (
-              roleInfo ? (
-                <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-                  <div className="font-semibold">{roleInfo.title}</div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {roleInfo.description}
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
-                  <div className="font-semibold">Other</div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    아직 역할이 애매하면 Other로 두고, 나중에 AI가 추천해주는 스타일을 보면서
-                    다시 바꿔도 돼.
-                  </p>
-                </div>
-              )
-            ) : null}
-
-            <InputPair
-              label="Bio"
-              description="Your public bio. It will be displayed on your profile page"
-              required
-              id="bio"
-              name="bio"
-              placeholder="John Doe"
-              textArea
-            />
-
-            <Button className="w-full">Update profile</Button>
-          </Form>
-        </div>
-
-        <aside className="col-span-2 p-6 rounded-lg border shadow-md">
-          <span className="text-sm font-bold text-muted-foreground uppercase">
-            <Label className="text-muted-foreground">
-              Avatar
-              <small className="text-muted-foreground">This is your public avatar</small>
-            </Label>
-          </span>
-
-          <div className="space-y-5">
-            <div className="size-40 rounded-full shadow-xl overflow-hidden">
-              {avatar ? <img src={avatar} className="object-cover w-full h-full" /> : null}
-            </div>
-
-            <Input type="file" className="w-1/2" onChange={onChange} required name="icon" />
-
-            <div className="flex flex-col text-us">
-              <span className="text-muted-foreground">Recommended size: 128x128px</span>
-              <span className="text-muted-foreground">Allowed formats: PNG, JPEG</span>
-              <span className="text-muted-foreground">Max file size: 1MB</span>
-            </div>
-
-            <Button className="w-full">Update avatar</Button>
-          </div>
-        </aside>
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
+        <p className="text-muted-foreground mt-1">
+          프로필 정보를 수정하실 수 있습니다.
+        </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Edit profile</CardTitle>
+          <CardDescription>이 정보는 My Profile 페이지에 표시됩니다.</CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {!hasProfile ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
+              현재 프로필 데이터가 아직 생성되어 있지 않습니다. 값을 입력 후 저장을 시도해 주세요.
+              (다음 단계에서 “자동 생성(Upsert)”로 더 매끄럽게 개선할 수 있습니다.)
+            </div>
+          ) : null}
+
+          {actionData?.ok ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              저장이 완료되었습니다.
+            </div>
+          ) : null}
+
+          {actionData?.error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {actionData.error}
+            </div>
+          ) : null}
+
+          <Form method="post" className="space-y-5">
+            <input type="hidden" name="intent" value="update-profile" />
+
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                name="name"
+                required
+                defaultValue={(profile as any)?.name ?? ""}
+                placeholder="John Doe"
+              />
+              <p className="text-xs text-muted-foreground">표시될 이름입니다.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                name="username"
+                required
+                defaultValue={(profile as any)?.username ?? ""}
+                placeholder="username"
+              />
+              <p className="text-xs text-muted-foreground">프로필에 표시될 사용자명입니다.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role">Role</Label>
+              <select
+                id="role"
+                name="role"
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as any)}
+                className="flex h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              >
+                <option value="" disabled>
+                  Select a role
+                </option>
+                <option value="developer">Developer</option>
+                <option value="driver">Driver</option>
+                <option value="drifter">Drifter</option>
+                <option value="dreamer">Dreamer</option>
+                <option value="other">Other</option>
+              </select>
+
+              <p className="text-xs text-muted-foreground">
+                가장 본인과 잘 맞는 역할을 선택해 주세요.
+              </p>
+
+              {selectedRole ? (
+                roleInfo ? (
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                    <div className="font-semibold">{roleInfo.title}</div>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {roleInfo.description}
+                    </p>
+                  </div>
+                ) : selectedRole === "other" ? (
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-2">
+                    <div className="font-semibold">Other</div>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      아직 자신에게 맞는 역할이 명확하지 않으시다면 Other를 선택하셔도 괜찮습니다.
+                      이후 AI가 제안하는 To-do 스타일을 경험해보신 뒤 언제든지 다시 변경하실 수 있습니다.
+                    </p>
+                  </div>
+                ) : null
+              ) : null}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bio">Bio</Label>
+              <textarea
+                id="bio"
+                name="bio"
+                defaultValue={(profile as any)?.bio ?? ""}
+                className="min-h-[120px] w-full rounded-md border bg-background px-3 py-2 text-sm"
+                placeholder="간단한 소개를 작성해 주세요."
+              />
+              <p className="text-xs text-muted-foreground">공개 소개글입니다.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="avatar">Avatar URL</Label>
+              <Input
+                id="avatar"
+                name="avatar"
+                defaultValue={(profile as any)?.avatar ?? ""}
+                placeholder="https://..."
+              />
+              <p className="text-xs text-muted-foreground">
+                현재는 URL 방식으로 저장합니다. (파일 업로드는 Storage 연결 후 추가하시면 됩니다.)
+              </p>
+            </div>
+
+            <Button className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? "Saving..." : "Update profile"}
+            </Button>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
