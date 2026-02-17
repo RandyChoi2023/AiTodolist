@@ -82,16 +82,37 @@ function CoreListBadgeBg(to: string) {
   return "";
 }
 
+type NavProfile = {
+  name?: string | null;
+  username?: string | null;
+  avatar?: string | null;
+};
+
+function getInitials(name?: string | null) {
+  const v = (name ?? "").trim();
+  if (!v) return "U";
+  const parts = v.split(/\s+/).filter(Boolean);
+  const first = parts[0]?.[0] ?? "U";
+  const second = parts.length > 1 ? parts[1]?.[0] : (parts[0]?.[1] ?? "");
+  return (first + second).toUpperCase();
+}
+
 export default function Navigation({
   isLoggedIn,
   hasNotifications,
   hasMessages,
+  profile,
 }: {
   isLoggedIn?: boolean;
   hasNotifications?: boolean;
   hasMessages?: boolean;
+  profile?: NavProfile | null;
 }) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
+
+  const displayName = (profile?.name ?? "User").trim() || "User";
+  const displayUsername = (profile?.username ?? "username").trim() || "username";
+  const avatarUrl = profile?.avatar ?? null;
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 h-14 sm:h-16 backdrop-blur bg-background/50 border-b">
@@ -230,7 +251,6 @@ export default function Navigation({
                   <NavigationMenuItem key={menu.name}>
                     {menu.items ? (
                       <>
-                        {/* Trigger는 메뉴 펼치기 용도로만 */}
                         <NavigationMenuTrigger>{menu.name}</NavigationMenuTrigger>
 
                         <NavigationMenuContent>
@@ -298,19 +318,16 @@ export default function Navigation({
               <DropdownMenuTrigger asChild>
                 <button className="rounded-full focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background">
                   <Avatar>
-                    <AvatarImage
-                      src="https://avatars.githubusercontent.com/u/126791186?u=7e7a14b519004369bb75e3ac0085f7cc85360e03&v=4&size=64"
-                      alt="User Avatar"
-                    />
-                    <AvatarFallback>N</AvatarFallback>
+                    <AvatarImage src={avatarUrl ?? undefined} alt="User Avatar" />
+                    <AvatarFallback>{getInitials(displayName)}</AvatarFallback>
                   </Avatar>
                 </button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent className="w-56" align="end">
                 <DropdownMenuLabel className="flex flex-col">
-                  <span className="font-medium">Randy</span>
-                  <span className="text-xs text-muted-foreground">@username</span>
+                  <span className="font-medium">{displayName}</span>
+                  <span className="text-xs text-muted-foreground">@{displayUsername}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
 

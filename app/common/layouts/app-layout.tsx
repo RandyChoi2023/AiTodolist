@@ -3,12 +3,17 @@ import type { loader as rootLoader } from "~/root";
 import Navigation from "~/common/components/navigation";
 
 export default function AppLayout() {
-  const { user } = useLoaderData<typeof rootLoader>();
+  const { user, profile } = useLoaderData<typeof rootLoader>();
   const isLoggedIn = user !== null;
 
   return (
     <div className="min-h-dvh">
-      <Navigation isLoggedIn={isLoggedIn} hasNotifications hasMessages />
+      <Navigation
+        isLoggedIn={isLoggedIn}
+        hasNotifications
+        hasMessages
+        profile={profile}
+      />
 
       {/* fixed header offset */}
       <main className="pt-16">

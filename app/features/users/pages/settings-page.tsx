@@ -21,7 +21,11 @@ import {
 
 import { makeSSRClient } from "~/supa-client";
 import type { Database } from "~/supa-client";
-import { getUserProfile, updateUserProfile } from "~/features/users/queries";
+import {
+  getUserProfile,
+  updateUserAvatar,
+  updateUserProfile,
+} from "~/features/users/queries";
 
 const ROLE_DESCRIPTIONS: Record<
   "developer" | "driver" | "drifter" | "dreamer",
@@ -49,7 +53,9 @@ const ROLE_DESCRIPTIONS: Record<
   },
 };
 
-export const meta: Route.MetaFunction = () => [{ title: "Settings | AI To-Do List" }];
+export const meta: Route.MetaFunction = () => [
+  { title: "Settings | AI To-Do List" },
+];
 
 type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
@@ -61,10 +67,8 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
 
   if (!user) throw redirect("/auth/login");
 
-  // ✅ getUserProfile이 null을 반환할 수 있음
   const profile = await getUserProfile(client, user.id);
 
-  // ✅ 화면에서 쓸 안전한 기본값(프로필이 없더라도 페이지는 뜨게)
   const safeProfile: Partial<ProfileRow> = profile ?? {
     profile_id: user.id,
     name: "",
@@ -74,9 +78,30 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
     todo_style: null,
   };
 
-  // email 같은 정보는 필요하면 여기서 같이 내려도 됨
   return { profile: safeProfile, hasProfile: Boolean(profile) };
 };
+
+type ActionResult = { intent: string; ok: boolean; error: string | null };
+
+function getImageExtFromFile(file: File) {
+  const byMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/avif": "avif",
+    "image/heic": "heic",
+    "image/heif": "heif",
+  };
+  const mimeExt = byMime[file.type];
+  if (mimeExt) return mimeExt;
+
+  const nameExt = file.name.split(".").pop()?.toLowerCase();
+  if (nameExt && /^[a-z0-9]+$/.test(nameExt)) return nameExt;
+
+  return "png";
+}
 
 export const action = async ({ request }: Route.ActionArgs) => {
   const { client } = makeSSRClient(request);
@@ -90,18 +115,60 @@ export const action = async ({ request }: Route.ActionArgs) => {
   const intent = String(fd.get("intent") ?? "update-profile");
 
   try {
+    // ✅ Avatar upload (Storage: avatars bucket, public, overwrite)
+    if (intent === "upload-avatar") {
+      const file = fd.get("avatarFile");
+
+      if (!(file instanceof File)) {
+        return { intent, ok: false, error: "업로드할 파일을 선택해줘." } satisfies ActionResult;
+      }
+      if (!file.type.startsWith("image/")) {
+        return { intent, ok: false, error: "이미지 파일만 업로드할 수 있어." } satisfies ActionResult;
+      }
+
+      const maxBytes = 2 * 1024 * 1024; // 2MB
+      if (file.size > maxBytes) {
+        return { intent, ok: false, error: "파일이 너무 커. (최대 2MB)" } satisfies ActionResult;
+      }
+
+      const ext = getImageExtFromFile(file);
+      const objectPath = `${user.id}/avatar.${ext}`;
+
+      // SSR(Node) 안전 업로드
+      const buf = Buffer.from(await file.arrayBuffer());
+
+      const { error: uploadError } = await client.storage
+        .from("avatars")
+        .upload(objectPath, buf, {
+          upsert: true,
+          contentType: file.type,
+          cacheControl: "3600",
+        });
+
+      if (uploadError) throw new Error(uploadError.message);
+
+      const { data } = client.storage.from("avatars").getPublicUrl(objectPath);
+
+      // overwrite cache busting
+      const avatarUrl = `${data.publicUrl}?v=${Date.now()}`;
+
+      await updateUserAvatar(client, user.id, avatarUrl);
+
+      return { intent, ok: true, error: null } satisfies ActionResult;
+    }
+
+    // ✅ Profile update (upsert 기반)
     if (intent !== "update-profile") {
-      return { ok: false, error: "Unsupported action." };
+      return { intent, ok: false, error: "Unsupported action." } satisfies ActionResult;
     }
 
     const name = String(fd.get("name") ?? "").trim();
     const username = String(fd.get("username") ?? "").trim();
     const bioRaw = String(fd.get("bio") ?? "").trim();
-    const avatar = String(fd.get("avatar") ?? "").trim();
     const role = String(fd.get("role") ?? "").trim();
 
-    if (!name) return { ok: false, error: "Name은 필수입니다." };
-    if (!username) return { ok: false, error: "Username은 필수입니다." };
+    if (!name) return { intent, ok: false, error: "Name은 필수입니다." } satisfies ActionResult;
+    if (!username) return { intent, ok: false, error: "Username은 필수입니다." } satisfies ActionResult;
 
     const todo_style =
       role === "developer" ||
@@ -117,27 +184,33 @@ export const action = async ({ request }: Route.ActionArgs) => {
         ? null
         : (todo_style as Database["public"]["Enums"]["todo_style"] | null);
 
-    // ⚠️ 프로필 row가 아예 없으면 update가 실패할 수 있음.
-    // 일단 에러를 잡아서 메시지로 보여주고 페이지는 안 죽게 함.
     await updateUserProfile(client, user.id, {
       name,
       username,
       bio: bioRaw ? bioRaw : null,
-      avatar: avatar ? avatar : null,
       todo_style: todoStyleForDb,
     });
 
-    return { ok: true, error: null };
+    return { intent, ok: true, error: null } satisfies ActionResult;
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" };
+    return {
+      intent,
+      ok: false,
+      error: e instanceof Error ? e.message : "Unknown error",
+    } satisfies ActionResult;
   }
 };
 
 export default function SettingsPage() {
   const { profile, hasProfile } = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<typeof action>() as ActionResult | undefined;
   const nav = useNavigation();
   const isSubmitting = nav.state === "submitting";
+
+  const avatarAction =
+    actionData && actionData.intent === "upload-avatar" ? actionData : null;
+  const profileAction =
+    actionData && actionData.intent === "update-profile" ? actionData : null;
 
   const [selectedRole, setSelectedRole] = React.useState<
     "developer" | "driver" | "drifter" | "dreamer" | "other" | ""
@@ -148,6 +221,15 @@ export default function SettingsPage() {
       ? ROLE_DESCRIPTIONS[selectedRole as keyof typeof ROLE_DESCRIPTIONS] ?? null
       : null;
 
+  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
+  const currentAvatar = (profile as any)?.avatar ?? null;
+
+  React.useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   return (
     <div className="space-y-8">
       <div>
@@ -157,6 +239,93 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/* Avatar Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Avatar</CardTitle>
+          <CardDescription>이미지 파일을 업로드해서 아바타로 저장합니다.</CardDescription>
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="h-20 w-20 overflow-hidden rounded-full border bg-muted/30">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="avatar preview"
+                  className="h-full w-full object-cover"
+                />
+              ) : currentAvatar ? (
+                <img
+                  src={currentAvatar}
+                  alt="current avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
+                  No Avatar
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <div className="text-sm font-medium">현재 아바타</div>
+              <div className="text-xs text-muted-foreground">
+                파일 선택 후 업로드 버튼을 누르면 저장돼.
+              </div>
+              {!hasProfile ? (
+                <div className="text-xs text-destructive">
+                  프로필이 아직 없으면 업로드 후 DB 저장에서 실패할 수 있어. 먼저 아래 프로필 저장해줘.
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <Form method="post" encType="multipart/form-data" className="space-y-4">
+            <input type="hidden" name="intent" value="upload-avatar" />
+
+            <div className="space-y-2">
+              <Label htmlFor="avatarFile">Upload image</Label>
+              <Input
+                id="avatarFile"
+                name="avatarFile"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const f = e.currentTarget.files?.[0];
+                  if (!f) {
+                    setPreviewUrl(null);
+                    return;
+                  }
+                  const url = URL.createObjectURL(f);
+                  setPreviewUrl(url);
+                }}
+              />
+              <p className="text-xs text-muted-foreground">
+                권장: 정사각형 이미지 / 2MB 이하
+              </p>
+            </div>
+
+            <Button disabled={isSubmitting} className="w-full">
+              {isSubmitting ? "Uploading..." : "Upload avatar"}
+            </Button>
+          </Form>
+
+          {avatarAction?.ok ? (
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              아바타 저장이 완료되었습니다.
+            </div>
+          ) : null}
+
+          {avatarAction?.error ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {avatarAction.error}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      {/* Edit Profile Card */}
       <Card>
         <CardHeader>
           <CardTitle>Edit profile</CardTitle>
@@ -171,15 +340,15 @@ export default function SettingsPage() {
             </div>
           ) : null}
 
-          {actionData?.ok ? (
+          {profileAction?.ok ? (
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
               저장이 완료되었습니다.
             </div>
           ) : null}
 
-          {actionData?.error ? (
+          {profileAction?.error ? (
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-              {actionData.error}
+              {profileAction.error}
             </div>
           ) : null}
 
@@ -207,7 +376,9 @@ export default function SettingsPage() {
                 defaultValue={(profile as any)?.username ?? ""}
                 placeholder="username"
               />
-              <p className="text-xs text-muted-foreground">프로필에 표시될 사용자명입니다.</p>
+              <p className="text-xs text-muted-foreground">
+                프로필에 표시될 사용자명입니다.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -271,10 +442,10 @@ export default function SettingsPage() {
                 id="avatar"
                 name="avatar"
                 defaultValue={(profile as any)?.avatar ?? ""}
-                placeholder="https://..."
+                readOnly
               />
               <p className="text-xs text-muted-foreground">
-                현재는 URL 방식으로 저장합니다. (파일 업로드는 Storage 연결 후 추가하시면 됩니다.)
+                아바타는 위에서 업로드로만 변경됩니다.
               </p>
             </div>
 

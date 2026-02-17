@@ -14,6 +14,9 @@ import "./app.css";
 import Navigation from "./common/components/navigation";
 import { cn } from "./lib/utils";
 import { makeSSRClient } from "./supa-client";
+import { getUserProfile } from "~/features/users/queries";
+
+
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -49,13 +52,31 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 
+
 export const loader = async ({ request }: Route.LoaderArgs) => {
   const { client } = makeSSRClient(request);
-  const { data: 
-    { user },
+
+  const {
+    data: { user },
   } = await client.auth.getUser();
-  return { user };
-}
+
+  if (!user) {
+    return { user: null, profile: null };
+  }
+
+  const profile = await getUserProfile(client, user.id);
+
+  // Navigation에서 쓸 최소 데이터만 내려주기
+  const navProfile = profile
+    ? {
+        name: profile.name ?? "",
+        username: profile.username ?? "",
+        avatar: profile.avatar ?? null,
+      }
+    : null;
+
+  return { user, profile: navProfile };
+};
 
 export default function App({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
@@ -73,10 +94,12 @@ export default function App({ loaderData }: Route.ComponentProps) {
     >
       {pathname.includes("/auth") ? null : (
         <Navigation 
-        isLoggedIn={isLoggedIn} 
-        hasNotifications={true} 
-        hasMessages={true}/>
-      )}
+          isLoggedIn={isLoggedIn}
+          hasNotifications={true}
+          hasMessages={true}
+          profile={loaderData.profile}
+        />
+    )}
       
       <Outlet />
     </div>

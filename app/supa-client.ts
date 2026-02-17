@@ -8,7 +8,7 @@ import type { MergeDeep, SetNonNullable } from "type-fest";
 
 export type Database = MergeDeep<SupabaseDatabase,
 {
-    pulbic: {
+    public: {
         Views: {
             todo_list_test_view: {
                 Row: SetNonNullable<SupabaseDatabase["public"]["Views"]["todo_list_test_view"]["Row"]>;
