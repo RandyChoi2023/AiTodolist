@@ -1,5 +1,5 @@
 
-import { pgSchema, pgTable, uuid ,text,timestamp, pgEnum, jsonb, bigint, primaryKey, integer} from "drizzle-orm/pg-core";
+import { pgSchema, pgTable, uuid ,text,timestamp, pgEnum, jsonb, bigint, primaryKey, integer, boolean} from "drizzle-orm/pg-core";
 import { goals } from "../goals/schema";
 import { todo } from "../todos/schema";
 import { coreList } from "../cores/schema";
@@ -71,9 +71,10 @@ export const notifications = pgTable("notifications", {
     goal_id: uuid().references(() => goals.id, {onDelete:"cascade"}),
     
     // ⚠️ 여기를 수정해야 합니다! todo_list.id가 serial(integer)이기 때문입니다.
-    todo_list_id: integer("todo_list_id").references(() => todo.id, {onDelete:"cascade"}).notNull(),
-    
-    core_list_id: uuid().references(() => coreList.id, {onDelete:"cascade"}).notNull(),
+    todo_list_id: integer("todo_list_id").references(() => todo.id, {onDelete:"cascade"}),
+    // ✅ 추가
+    seen: boolean("seen").notNull().default(false),
+    core_list_id: uuid().references(() => coreList.id, {onDelete:"cascade"}),
     target_id: uuid().references(() => profiles.profile_id, {onDelete:"cascade"}).notNull(),
     type: notificationType().notNull(),
     created_at: timestamp({withTimezone: true}).defaultNow(),
@@ -97,5 +98,6 @@ export const messages = pgTable("messages", {
     room_id: bigint({mode: "number"}).references(() => messageRooms.room_id, {onDelete:"cascade"}),
     sender_id: uuid().references(() => profiles.profile_id, {onDelete:"cascade"}),
     content: text().notNull(),
+    seen_by: integer().notNull().default(0),
     created_at: timestamp({withTimezone: true}).defaultNow(),
 });

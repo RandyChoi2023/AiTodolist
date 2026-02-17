@@ -230,6 +230,7 @@ export type Database = {
           created_at: string | null
           message_id: number
           room_id: number | null
+          seen_by: number
           sender_id: string | null
         }
         Insert: {
@@ -237,6 +238,7 @@ export type Database = {
           created_at?: string | null
           message_id?: never
           room_id?: number | null
+          seen_by?: number
           sender_id?: string | null
         }
         Update: {
@@ -244,6 +246,7 @@ export type Database = {
           created_at?: string | null
           message_id?: never
           room_id?: number | null
+          seen_by?: number
           sender_id?: string | null
         }
         Relationships: [
@@ -265,33 +268,36 @@ export type Database = {
       }
       notifications: {
         Row: {
-          core_list_id: string
+          core_list_id: string | null
           created_at: string | null
           goal_id: string | null
           notification_id: number
+          seen: boolean
           source_id: string | null
           target_id: string
-          todo_list_id: number
+          todo_list_id: number | null
           type: Database["public"]["Enums"]["notification_type"]
         }
         Insert: {
-          core_list_id: string
+          core_list_id?: string | null
           created_at?: string | null
           goal_id?: string | null
           notification_id?: never
+          seen?: boolean
           source_id?: string | null
           target_id: string
-          todo_list_id: number
+          todo_list_id?: number | null
           type: Database["public"]["Enums"]["notification_type"]
         }
         Update: {
-          core_list_id?: string
+          core_list_id?: string | null
           created_at?: string | null
           goal_id?: string | null
           notification_id?: never
+          seen?: boolean
           source_id?: string | null
           target_id?: string
-          todo_list_id?: number
+          todo_list_id?: number | null
           type?: Database["public"]["Enums"]["notification_type"]
         }
         Relationships: [

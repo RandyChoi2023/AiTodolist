@@ -139,35 +139,52 @@ export const action = async ({ request }: Route.ActionArgs) => {
     }
   }
 
-  // ✅ 생성(create)
-  const raw = {
-    title: String(formData.get("title") ?? ""),
-    why: String(formData.get("why") ?? ""),
-    category: String(formData.get("category") ?? ""),
-    target: String(formData.get("target") ?? ""),
-  };
-
-  const parsed = createGoalSchema.safeParse({
-    title: raw.title.trim(),
-    why: raw.why.trim() || "",
-    category: raw.category.trim() || undefined,
-    target: raw.target.trim() || undefined,
-  });
-
-  if (!parsed.success) {
-    return data({ ok: false as const, error: "title은 필수야." }, { status: 400, headers });
-  }
-
-  const goal = await createGoal(client, {
-    profileId: userId,
-    ...(parsed.data as { title: string; why: string; category?: string; target?: string }),
-  });
-
-  if (!goal) {
-    return data({ ok: false as const, error: "목표 생성에 실패했어요." }, { status: 400, headers });
-  }
-
-  return data({ ok: true as const, intent: "create" as const, goal }, { headers });
+    // ✅ 생성(create)
+    const raw = {
+      title: String(formData.get("title") ?? ""),
+      why: String(formData.get("why") ?? ""),
+      category: String(formData.get("category") ?? ""),
+      target: String(formData.get("target") ?? ""),
+    };
+  
+    const parsed = createGoalSchema.safeParse({
+      title: raw.title.trim(),
+      why: raw.why.trim() || "",
+      category: raw.category.trim() || undefined,
+      target: raw.target.trim() || undefined,
+    });
+  
+    if (!parsed.success) {
+      return data({ ok: false as const, error: "title은 필수야." }, { status: 400, headers });
+    }
+  
+    try {
+      const goal = await createGoal(client, {
+        profileId: userId,
+        ...(parsed.data as { title: string; why: string; category?: string; target?: string }),
+      });
+  
+      if (!goal) {
+        return data({ ok: false as const, error: "목표 생성에 실패했어요." }, { status: 400, headers });
+      }
+  
+      return data({ ok: true as const, intent: "create" as const, goal }, { headers });
+    } catch (e: any) {
+      // ✅ 여기서 에러를 최대한 펼쳐서 보여주자
+      const message =
+        e?.message ??
+        e?.error?.message ??
+        e?.details ??
+        e?.hint ??
+        (typeof e === "string" ? e : null) ??
+        "목표 생성 중 오류가 발생했어요.";
+  
+      // ✅ dev 서버 터미널에서 볼 수 있게 로그도 찍기
+      console.error("[goals/create] error:", e);
+  
+      return data({ ok: false as const, error: message }, { status: 400, headers });
+    }
+  
 };
 
 export default function GoalsListPage() {

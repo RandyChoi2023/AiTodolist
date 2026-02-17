@@ -14,7 +14,7 @@ import "./app.css";
 import Navigation from "./common/components/navigation";
 import { cn } from "./lib/utils";
 import { makeSSRClient } from "./supa-client";
-import { getUserProfile } from "~/features/users/queries";
+import { getUserProfile,hasUnreadNotifications } from "~/features/users/queries";
 
 
 
@@ -61,12 +61,11 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
   } = await client.auth.getUser();
 
   if (!user) {
-    return { user: null, profile: null };
+    return { user: null, profile: null, hasNotifications: false, hasMessages: false };
   }
 
   const profile = await getUserProfile(client, user.id);
 
-  // Navigation에서 쓸 최소 데이터만 내려주기
   const navProfile = profile
     ? {
         name: profile.name ?? "",
@@ -75,7 +74,14 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
       }
     : null;
 
-  return { user, profile: navProfile };
+  const hasNotifications = await hasUnreadNotifications(client, { userId: user.id });
+
+  return {
+    user,
+    profile: navProfile,
+    hasNotifications,
+    hasMessages: false, // 일단 false로 (나중에 메시지 붙일 때)
+  };
 };
 
 export default function App({ loaderData }: Route.ComponentProps) {
@@ -93,12 +99,13 @@ export default function App({ loaderData }: Route.ComponentProps) {
       })}
     >
       {pathname.includes("/auth") ? null : (
-        <Navigation 
-          isLoggedIn={isLoggedIn}
-          hasNotifications={true}
-          hasMessages={true}
-          profile={loaderData.profile}
-        />
+      <Navigation
+      isLoggedIn={isLoggedIn}
+      hasNotifications={loaderData.hasNotifications}
+      hasMessages={loaderData.hasMessages}
+      profile={loaderData.profile}
+    />
+        
     )}
       
       <Outlet />

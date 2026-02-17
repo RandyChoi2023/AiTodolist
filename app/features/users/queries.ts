@@ -26,62 +26,61 @@ export async function getUserProfile(
   
     if (error) throw new Error(error.message);
     return data; // ✅ data는 Row | null
-  }
-
-export async function updateUserProfile(
-  client: SupabaseClient<Database>,
-  profileId: string,
-  patch: {
-    name: string; // ✅ 필수
-    username: string; // ✅ 필수
-    bio?: string | null;
-    avatar?: string | null;
-    todo_style?: Database["public"]["Enums"]["todo_style"] | null;
-  }
-) {
-  type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
-
-  // ✅ Insert 타입에서 name/username이 필수이므로 처음부터 포함
-  const values: ProfileInsert = {
-    profile_id: profileId,
-    name: patch.name,
-    username: patch.username,
-    bio: patch.bio ?? null,
-    avatar: patch.avatar ?? null,
-    todo_style: patch.todo_style ?? null,
-    // created_at/updated_at은 DB default를 쓰고 싶으면 빼도 됨.
-    updated_at: new Date().toISOString(),
   };
 
+
+
+
+export type NotificationWithSource = {
+  notification_id: number;
+  type: Database["public"]["Enums"]["notification_type"];
+  seen: boolean;
+  created_at: string;
+  source: {
+    profile_id: string;
+    name: string | null;
+    avatar: string | null;
+  } | null;
+};
+
+export async function getNotifications(
+  client: SupabaseClient<Database>,
+  { userId }: { userId: string }
+): Promise<NotificationWithSource[]> {
   const { data, error } = await client
-    .from("profiles")
-    .upsert(values, { onConflict: "profile_id" })
+    .from("notifications")
     .select(
-      "profile_id, avatar, name, username, headline, bio, todo_style, motivation_type, ai_styles, task_count, histories, created_at, updated_at"
+      `
+      notification_id,
+      type,
+      seen,
+      created_at,
+      source:profiles!notifications_source_id_profiles_profile_id_fk(
+        profile_id,
+        name,
+        avatar
+      )
+    `
     )
-    .maybeSingle();
+    .eq("target_id", userId)
+    .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  if (!data) throw new Error("프로필 저장에 실패했어. (RLS 정책/권한 문제 가능)");
-
-  return data;
+  return (data ?? []) as NotificationWithSource[];
 }
 
 
-
-export async function updateUserAvatar(
+export async function hasUnreadNotifications(
   client: SupabaseClient<Database>,
-  profileId: string,
-  avatar: string | null
+  { userId }: { userId: string }
 ) {
-  const { error } = await client
-    .from("profiles")
-    .update({
-      avatar,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("profile_id", profileId);
+  const { data, error } = await client
+    .from("notifications")
+    .select("notification_id")
+    .eq("target_id", userId)
+    .eq("seen", false)
+    .limit(1);
 
   if (error) throw new Error(error.message);
-  return true;
+  return (data?.length ?? 0) > 0;
 }

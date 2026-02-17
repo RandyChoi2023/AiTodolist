@@ -23,9 +23,12 @@ import { makeSSRClient } from "~/supa-client";
 import type { Database } from "~/supa-client";
 import {
   getUserProfile,
+} from "~/features/users/queries";
+
+import {
   updateUserAvatar,
   updateUserProfile,
-} from "~/features/users/queries";
+} from "~/features/users/mutations";
 
 const ROLE_DESCRIPTIONS: Record<
   "developer" | "driver" | "drifter" | "dreamer",
