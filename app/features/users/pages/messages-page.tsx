@@ -24,7 +24,7 @@ export default function MessagesPage() {
           </p>
 
           <div className="mt-5 flex justify-center">
-            <Button variant="secondary" onClick={() => navigate("/messages")}>
+            <Button variant="secondary" onClick={() => navigate("/my/messages")}>
               Go to list
             </Button>
           </div>
