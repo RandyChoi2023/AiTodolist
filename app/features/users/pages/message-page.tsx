@@ -1,6 +1,4 @@
-// ✅ "1 days ago" -> "1 day ago" + 자동으로 "x minutes/hours/days ago" 표시
-
-import { Card, CardDescription, CardHeader, CardTitle } from "~/common/components/ui/card";
+import * as React from "react";
 import type { Route } from "./+types/message-page";
 import { Avatar, AvatarFallback, AvatarImage } from "~/common/components/ui/avatar";
 import { Form, useOutletContext } from "react-router";
@@ -15,7 +13,9 @@ import {
   sendMessageToRoom,
 } from "../queries";
 import { MessageBubble } from "./message-bubble";
-import { useEffect, useMemo, useRef } from "react";
+import { Card } from "~/common/components/ui/card";
+import { cn } from "~/lib/utils";
+import { messageRooms } from "../schema";
 
 export const meta: Route.MetaFunction = () => [{ title: "Message | AI To-Do List" }];
 
@@ -53,7 +53,9 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     userId,
   });
 
-  // ✅ 마지막 메시지 시간(없으면 null)
+  console.log(params.messageRoomId);
+  console.log(userId);
+  console.log(participants);
   const lastMessageAt =
     messages.length > 0 ? (messages[messages.length - 1] as any).created_at : null;
 
@@ -63,11 +65,12 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { client } = makeSSRClient(request);
   const userId = await getLoggedInUserId(client);
+
   const formData = await request.formData();
   const message = formData.get("message");
 
   await sendMessageToRoom(client, {
-    messageRoomId: params.messageRoomId,
+    messageRoomId: Number(params.messageRoomId),
     message: message as string,
     userId,
   });
@@ -77,61 +80,107 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
 export default function MessagePage({ loaderData, actionData }: Route.ComponentProps) {
   const { userId } = useOutletContext<{ userId: string }>();
-  const formRef = useRef<HTMLFormElement>(null);
 
-  useEffect(() => {
+  const formRef = React.useRef<HTMLFormElement>(null);
+  const bottomRef = React.useRef<HTMLDivElement>(null);
+
+  const lastText = React.useMemo(
+    () => timeAgo(loaderData.lastMessageAt),
+    [loaderData.lastMessageAt]
+  );
+
+  // 전송 성공 시 입력창 리셋 + 아래로 스크롤
+  React.useEffect(() => {
     if (actionData?.ok) {
       formRef.current?.reset();
+      requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }));
     }
   }, [actionData]);
 
-  const lastText = useMemo(() => timeAgo(loaderData.lastMessageAt), [loaderData.lastMessageAt]);
+  // 메시지 갯수 변하면 아래로 스크롤
+  React.useEffect(() => {
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ behavior: "auto" }));
+  }, [loaderData.messages.length]);
+
+  const otherName = loaderData.participants?.profile?.name ?? "";
+  const otherAvatar = loaderData.participants?.profile?.avatar ?? "";
+  const otherInitial = otherName?.charAt(0) ?? "";
 
   return (
-    <div className="h-full flex flex-col justify-between">
-      <Card>
-        <CardHeader className="flex flex-row items-center gap-4">
-          <Avatar className="size-14">
-            <AvatarImage src={loaderData.participants?.profile?.avatar ?? ""} />
-            <AvatarFallback>
-              {loaderData.participants?.profile?.name?.charAt(0) ?? ""}
-            </AvatarFallback>
+    // ✅ iOS 키보드/주소창 대응: 100dvh
+    <div className="h-[100dvh] flex flex-col bg-background">
+      {/* Header */}
+      <div className="shrink-0 border-b bg-card">
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-3 py-3 md:px-4">
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={otherAvatar || undefined} />
+            <AvatarFallback>{otherInitial}</AvatarFallback>
           </Avatar>
-          <div className="flex flex-col gap-0">
-            <CardTitle>{loaderData.participants?.profile?.name ?? ""}</CardTitle>
-            <CardDescription>{lastText}</CardDescription>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{otherName}</p>
+            <p className="truncate text-xs text-muted-foreground">{lastText}</p>
           </div>
-        </CardHeader>
-      </Card>
-
-      <div className="py-10 overflow-y-scroll space-y-4 flex flex-col justify-start h-full">
-        {loaderData.messages.map((message) => (
-          <MessageBubble
-            key={message.message_id}
-            avatarUrl={message.sender?.avatar ?? ""}
-            avatarFallback={message.sender?.name?.charAt(0) ?? ""}
-            content={message.content}
-            isCurrentUser={message.sender?.profile_id === userId}
-          />
-        ))}
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <Form ref={formRef} method="post" className="relative flex justify-end item-center">
-            <Textarea
-              placeholder="Write a message..."
-              rows={2}
-              className="resize-none"
-              required
-              name="message"
+      {/* ✅ Messages scroll area (여기가 핵심) */}
+      <div
+        className={cn(
+          "flex-1 min-h-0 overflow-y-auto", // ✅ min-h-0 필수!
+          "px-3 py-4 md:px-4 md:py-5"
+        )}
+      >
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
+          {loaderData.messages.map((message) => (
+            <MessageBubble
+              key={message.message_id}
+              avatarUrl={message.sender?.avatar ?? ""}
+              avatarFallback={message.sender?.name?.charAt(0) ?? ""}
+              content={message.content}
+              isCurrentUser={message.sender?.profile_id === userId}
             />
-            <Button type="submit" size="icon" className="absolute right-2 top-4">
-              <SendIcon className="size-4" />
-            </Button>
-          </Form>
-        </CardHeader>
-      </Card>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+      </div>
+
+      {/* ✅ Composer (sticky 제거하고, flex 구조로 “아래 고정”이 제일 안전함) */}
+      <div className="shrink-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+        {/* ✅ iPhone safe-area */}
+        <div className="pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto w-full max-w-3xl px-3 py-3 md:px-4">
+            <Card className="rounded-2xl border shadow-sm">
+              <div className="p-3">
+                <Form ref={formRef} method="post" className="relative">
+                  <Textarea
+                    placeholder="Write a message..."
+                    rows={2}
+                    className="min-h-[44px] resize-none rounded-2xl pr-12"
+                    required
+                    name="message"
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                        (e.currentTarget.form as HTMLFormElement | null)?.requestSubmit();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    className="absolute right-2 top-2 h-9 w-9 rounded-xl"
+                  >
+                    <SendIcon className="h-4 w-4" />
+                  </Button>
+
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Tip: <span className="font-medium">Cmd/Ctrl + Enter</span> to send
+                  </p>
+                </Form>
+              </div>
+            </Card>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

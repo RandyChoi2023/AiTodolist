@@ -104,21 +104,21 @@ export async function getUserProfileByUsername(
 
   return data;
 }
-
 export const getMessages = async (
   client: SupabaseClient<Database>,
-  {userId}: { userId: string}
- ) => {
-    const { data, error } = await client
-        .from("message_view")
-        .select("*")
-        .eq("profile_id", userId)
-        .neq("other_profile_id", userId);
-    if(error) {
-      throw error;
-    }
-    return data;
-}
+  { userId }: { userId: string }
+) => {
+  const { data, error } = await client
+    .from("message_view")
+    .select("*")
+    .eq("profile_id", userId)
+    .order("last_message_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return data ?? [];
+};
+
 
 export const getMessagesByMessagesRoomId = async (
   client: SupabaseClient<Database>,
@@ -206,38 +206,32 @@ export const getRoomsParticipant = async(
   return data;
 }
 
+
 export const sendMessageToRoom = async (
-  client: SupabaseClient<Database>,{
+  client: SupabaseClient<Database>,
+  {
     messageRoomId,
     message,
     userId,
-  }: { messageRoomId: string; message: string; userId: string}
+  }: { messageRoomId: number; message: string; userId: string }
 ) => {
+  const trimmed = message.trim();
+  if (!trimmed) return; // 또는 throw new Error("Empty message")
 
   const { count, error: countError } = await client
-  .from("message_room_member")
-  .select("*", { count: "exact", head: true })
-  .eq("room_id", Number(messageRoomId))
-  .eq("profile_id", userId);
+    .from("message_room_member")
+    .select("*", { count: "exact", head: true })
+    .eq("room_id", messageRoomId)
+    .eq("profile_id", userId);
 
-
-  if(countError){
-    throw countError;
-  }
-
-  if(count === 0){
-    throw new Error("Message room not found");
-  }
-  
+  if (countError) throw countError;
+  if ((count ?? 0) === 0) throw new Error("Message room not found");
 
   const { error } = await client.from("messages").insert({
-    content: message,
-    room_id: Number(messageRoomId),
+    content: trimmed,
+    room_id: messageRoomId,
     sender_id: userId,
   });
 
-  if(error){
-    throw error;
-  }
-
-} 
+  if (error) throw error;
+};
