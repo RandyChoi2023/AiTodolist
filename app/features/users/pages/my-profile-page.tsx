@@ -61,7 +61,7 @@ export default function MyProfilePage() {
           <div className="flex items-center gap-4">
             <Avatar className="size-14">
               <AvatarImage src={user.avatar} alt="User avatar" />
-              <AvatarFallback>R</AvatarFallback>
+              <AvatarFallback>{user.name}</AvatarFallback>
             </Avatar>
 
             <div className="space-y-1">

@@ -84,3 +84,160 @@ export async function hasUnreadNotifications(
   if (error) throw new Error(error.message);
   return (data?.length ?? 0) > 0;
 }
+
+
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
+
+export async function getUserProfileByUsername(
+  client: SupabaseClient<Database>,
+  username: string
+): Promise<ProfileRow> {
+  const { data, error } = await client
+    .from("profiles")
+    .select("*")
+    .eq("username", username)
+    .single();
+
+  if (error || !data) {
+    throw new Error("User not found");
+  }
+
+  return data;
+}
+
+export const getMessages = async (
+  client: SupabaseClient<Database>,
+  {userId}: { userId: string}
+ ) => {
+    const { data, error } = await client
+        .from("message_view")
+        .select("*")
+        .eq("profile_id", userId)
+        .neq("other_profile_id", userId);
+    if(error) {
+      throw error;
+    }
+    return data;
+}
+
+export const getMessagesByMessagesRoomId = async (
+  client: SupabaseClient<Database>,
+  {messageRoomId, userId}:{ messageRoomId: number; userId: string}
+) => {
+  const { count, error: countError } = await client
+  .from("message_room_member")
+  .select("*", { count: "exact", head: true })
+  .eq("room_id", messageRoomId)
+  .eq("profile_id", userId);
+
+  if(countError){
+    throw countError;
+  }
+  
+  if (count === 0 ){
+    throw new Error("Message room not found");
+  }
+  const { data, error } = await client
+  .from("messages")
+  .select(`
+    message_id,
+    room_id,
+    sender_id,
+    content,
+    created_at,
+    sender:profiles!sender_id(
+      name,
+      profile_id,
+      avatar
+    )
+  `)
+  .eq("room_id", messageRoomId)
+  .order("created_at", { ascending: true });
+
+  if(error) {
+    throw error;
+  }
+
+  return data;
+}
+
+
+export const getRoomsParticipant = async(
+  client: SupabaseClient<Database>,
+  { messageRoomId, userId }: { messageRoomId: number; userId: string}
+) => {
+
+  const { count, error: countError } = await client
+    .from("message_room_member")
+    .select("*", { count: "exact", head: true })
+    .eq("room_id", messageRoomId)
+    .eq("profile_id", userId);
+
+ 
+  if(countError){
+    throw countError;
+  }
+
+  if(count === 0){
+    throw new Error("Message room not found");
+  }
+
+  const { data, error } = await client
+  .from("message_room_member")
+  .select(
+    `
+    room_id,
+    profile_id,
+    profile:profiles!profile_id!inner(
+      name,
+      avatar
+    )
+  `
+  )
+  .eq("room_id", messageRoomId)
+  .neq("profile_id", userId)
+  .limit(1)
+  .maybeSingle();
+  
+  if(error) {
+    throw error;
+  }
+
+  return data;
+}
+
+export const sendMessageToRoom = async (
+  client: SupabaseClient<Database>,{
+    messageRoomId,
+    message,
+    userId,
+  }: { messageRoomId: string; message: string; userId: string}
+) => {
+
+  const { count, error: countError } = await client
+  .from("message_room_member")
+  .select("*", { count: "exact", head: true })
+  .eq("room_id", Number(messageRoomId))
+  .eq("profile_id", userId);
+
+
+  if(countError){
+    throw countError;
+  }
+
+  if(count === 0){
+    throw new Error("Message room not found");
+  }
+  
+
+  const { error } = await client.from("messages").insert({
+    content: message,
+    room_id: Number(messageRoomId),
+    sender_id: userId,
+  });
+
+  if(error){
+    throw error;
+  }
+
+} 

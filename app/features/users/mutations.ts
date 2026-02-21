@@ -75,3 +75,48 @@ export async function updateUserProfile(
         throw error;
     }
   };
+
+
+  export const sendMessage = async (
+    client: SupabaseClient<Database>,
+    { fromUserId, toUserId,content}: { fromUserId: string; toUserId: string; content: string}
+  ) => {
+    const {data, error } = await client.rpc("get_room", {
+      from_user_id: fromUserId,
+      to_user_id: toUserId,
+    }).maybeSingle();
+    if(error) {
+      throw error;
+    }
+    if(data?.room_id){
+      await client.from("messages").insert({
+        room_id: data.room_id,
+        sender_id: fromUserId,
+        content,
+      });
+    } else {
+      const { data: roomData, error:roomError} = await client
+        .from("message_rooms")
+        .insert({})
+        .select("room_id")
+        .single();
+      if(roomError) {
+        throw roomError;
+      }
+      await client.from("message_room_member").insert([{
+          room_id: roomData.room_id,
+          profile_id: fromUserId,
+        },{
+          room_id: roomData.room_id,
+          profile_id: toUserId,
+        }
+      ]);
+
+      await client.from("messages").insert({
+        room_id: roomData.room_id,
+        sender_id: fromUserId,
+        content,
+      });
+      return roomData.room_id;
+    }
+  }

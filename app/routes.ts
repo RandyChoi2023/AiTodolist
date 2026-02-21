@@ -5,6 +5,7 @@ export default [
     index("home.tsx"),
     //goals
     route("goals", "features/goals/goals-list.tsx"),
+    route("generate-todo","features/goals/generate-todo-page.tsx"),
     //to-do-list
     route("to-do-lists", "features/todos/todo-list.tsx"),
     //core-list
@@ -18,7 +19,10 @@ export default [
     //motivation
     route("/motivation", "features/motivation/sentence-page.tsx"),
     //subscribe
-    route("subscribe", "features/subscribe/subscribe-page.tsx"),
+    route("/subscribe", "features/subscribe/subscribe-page.tsx"),
+    //Question
+    route("/question","features/question/question-page.tsx"), 
+                      
     //report
     ...prefix("/report",[
         route("/weekly","features/report/weekly-page.tsx"),
@@ -49,16 +53,15 @@ export default [
         layout("features/users/layouts/message-layout.tsx", [
             ...prefix("/messages", [
                 index("features/users/pages/messages-page.tsx"),
-                route("/:messagesId", "features/users/pages/message-page.tsx"),
+                route("/:messageRoomId", "features/users/pages/message-page.tsx"),
             ]),
         ]),
         
     ]),
 
-
-
     route("/users/:username","features/users/pages/profile-page.tsx"),
     
+    route("/messages/:username/send","features/users/pages/send-message-page.tsx"),
    
     // 추후에 업데이트 아이디어 추가 예정
     // ...prefix("cores", [

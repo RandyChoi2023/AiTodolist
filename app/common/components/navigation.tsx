@@ -73,6 +73,7 @@ const menus: Menu[] = [
   },
   { name: "Motivation", to: "/motivation" },
   { name: "Subscribe", to: "/subscribe" },
+  { name: "Question", to: "/question" },
 ];
 
 function CoreListBadgeBg(to: string) {

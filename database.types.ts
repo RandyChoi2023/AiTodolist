@@ -535,6 +535,39 @@ export type Database = {
       }
     }
     Views: {
+      message_view: {
+        Row: {
+          avatar: string | null
+          last_message: string | null
+          name: string | null
+          other_profile_id: string | null
+          profile_id: string | null
+          room_id: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_room_member_profile_id_profiles_profile_id_fk"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "message_room_member_profile_id_profiles_profile_id_fk"
+            columns: ["other_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "message_room_member_room_id_message_rooms_room_id_fk"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "message_rooms"
+            referencedColumns: ["room_id"]
+          },
+        ]
+      }
       todo_list_test_view: {
         Row: {
           created_at: string | null
@@ -561,7 +594,12 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      get_room: {
+        Args: { from_user_id: string; to_user_id: string }
+        Returns: {
+          room_id: number
+        }[]
+      }
     }
     Enums: {
       ai_styles: "soft" | "strict" | "playful"

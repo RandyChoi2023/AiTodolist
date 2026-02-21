@@ -10,6 +10,11 @@ export type Database = MergeDeep<SupabaseDatabase,
 {
     public: {
         Views: {
+            message_view: {
+                Row: SetNonNullable<
+                     SupabaseDatabase["public"]["Views"]["message_view"]["Row"]
+                >;
+            };
             todo_list_test_view: {
                 Row: SetNonNullable<SupabaseDatabase["public"]["Views"]["todo_list_test_view"]["Row"]>;
             };

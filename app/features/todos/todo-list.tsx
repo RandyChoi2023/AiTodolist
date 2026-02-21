@@ -41,33 +41,14 @@ function countChecks(t: any) {
   ].filter(Boolean).length;
 }
 
-// ✅ 요일(일~토). 한국어로 바꾸고 싶으면 ["일","월","화","수","목","금","토"]
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/**
- * ✅ period_start(YYYY-MM-DD)의 요일부터 7칸 라벨을 회전시켜 만든다.
- * - Date("YYYY-MM-DD")는 환경에 따라 UTC 해석 이슈가 있어서 (y,m,d)로 안전 파싱
- */
 function getRollingDowLabels(periodStart: string) {
   const [y, m, d] = periodStart.split("-").map(Number);
   const start = new Date(y, m - 1, d);
-  const startDay = start.getDay(); // 0=Sun ... 6=Sat
+  const startDay = start.getDay();
   return Array.from({ length: 7 }, (_, i) => DOW[(startDay + i) % 7]);
 }
-
-/**
- * ✅ (추천) 날짜 라벨이 더 직관적이면 이걸 사용해.
- * 현재는 요일 라벨을 쓰지만, 아래 함수로 쉽게 교체 가능.
- */
-// function getRollingDateLabels(periodStart: string) {
-//   const [y, m, d] = periodStart.split("-").map(Number);
-//   const start = new Date(y, m - 1, d);
-//   return Array.from({ length: 7 }, (_, i) => {
-//     const dt = new Date(start);
-//     dt.setDate(start.getDate() + i);
-//     return `${dt.getMonth() + 1}/${dt.getDate()}`;
-//   });
-// }
 
 export const loader = async ({ request }: Route.LoaderArgs) => {
   const { client, headers } = makeSSRClient(request);
@@ -76,7 +57,6 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
   const user = userData?.user;
   if (!user) return redirect("/auth/login", { headers });
 
-  // ✅ 기간 만료된 주간 todo는 히스토리 저장 후 자동 초기화
   await rolloverExpiredWeeklyTodos(client, { userId: user.id });
 
   const todos = await getWeeklyTodos(client, { userId: user.id });
@@ -108,7 +88,6 @@ export const action = async ({ request }: Route.ActionArgs) => {
 
     if (intent === "delete") {
       const id = String(fd.get("id") ?? "");
-      // ✅ core list까지 함께 삭제
       await deleteWeeklyTodoWithCore(client, { userId: user.id, id });
       return data({ ok: true }, { headers });
     }
@@ -145,6 +124,7 @@ export const action = async ({ request }: Route.ActionArgs) => {
   }
 };
 
+
 function MiniDayCheck({
   label,
   checked,
@@ -167,27 +147,28 @@ function MiniDayCheck({
       )}
       aria-label={`Day ${label}`}
     >
-      {/* ✅ 동그란 미니 버튼 */}
       <span
         className={cn(
           "h-7 w-7 rounded-full border flex items-center justify-center transition",
           "hover:shadow-sm",
-          checked ? "bg-foreground border-foreground" : "bg-background",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          // ✅ 여기: 체크됐을 때 indigo 톤
+          checked
+            ? "bg-indigo-500 border-indigo-500"
+            : "bg-background border-muted-foreground/30",
+          // ✅ 포커스 링도 indigo
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
         )}
       >
-        {/* 안쪽 점 */}
         <span
           className={cn(
             "h-2 w-2 rounded-full transition",
             checked
-              ? "bg-background"
+              ? "bg-indigo-50"
               : "bg-muted-foreground/30 group-hover:bg-muted-foreground/50"
           )}
         />
       </span>
 
-      {/* ✅ 라벨(요일/날짜) */}
       <span className="text-[10px] text-muted-foreground">{label}</span>
     </button>
   );
@@ -197,7 +178,6 @@ export default function TodoPage() {
   const { todos } = useLoaderData<typeof loader>();
   const [title, setTitle] = React.useState("");
 
-  // fetcher 분리: 상태 메시지/버튼 라벨 정확히
   const addFetcher = useFetcher();
   const deleteFetcher = useFetcher();
   const toggleFetcher = useFetcher();
@@ -228,6 +208,16 @@ export default function TodoPage() {
     addFetcher.submit({ intent: "add", title: v }, { method: "post" });
     setTitle("");
   };
+
+  // ✅ OPTIMISTIC: 토글 제출 중이면 그 값(value)을 UI에 즉시 반영
+  const pendingToggle =
+    toggleFetcher.state !== "idle"
+      ? {
+          id: String(toggleFetcher.formData?.get("id") ?? ""),
+          index: String(toggleFetcher.formData?.get("index") ?? ""),
+          value: String(toggleFetcher.formData?.get("value") ?? ""),
+        }
+      : null;
 
   return (
     <div className="min-h-screen">
@@ -271,10 +261,7 @@ export default function TodoPage() {
               const canPromote = checked >= 5 && !t.promoted_to_core;
               const rowDeleting = deletingId === t.id;
 
-              // ✅ 시작일 요일부터 라벨 회전
               const labels = getRollingDowLabels(String(t.period_start));
-              // 날짜 라벨이 더 좋으면:
-              // const labels = getRollingDateLabels(String(t.period_start));
 
               return (
                 <div key={t.id} className="border rounded-xl px-4 py-4">
@@ -288,7 +275,6 @@ export default function TodoPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* Core promote 버튼: 5개 이상 체크 시 노출 */}
                       {canPromote ? (
                         <Button
                           size="sm"
@@ -304,7 +290,6 @@ export default function TodoPage() {
                         </Button>
                       ) : null}
 
-                      {/* ✅ 삭제: Core 등록된 항목이면 confirm */}
                       {t.promoted_to_core ? (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
@@ -365,16 +350,26 @@ export default function TodoPage() {
                     <div className="flex gap-3">
                       {Array.from({ length: 7 }).map((_, idx) => {
                         const col = `check_${idx}` as keyof typeof t;
-                        const checkedVal = Boolean(t[col]);
+                        const serverChecked = Boolean(t[col]);
 
                         const key = `${t.id}:${idx}`;
                         const togglingThis = togglingKey === key;
+
+                        // ✅ OPTIMISTIC: 현재 제출 중인 그 버튼이면 formData의 value로 UI 표시
+                        const isThisPending =
+                          pendingToggle &&
+                          pendingToggle.id === String(t.id) &&
+                          pendingToggle.index === String(idx);
+
+                        const uiChecked = isThisPending
+                          ? pendingToggle!.value === "true"
+                          : serverChecked;
 
                         return (
                           <MiniDayCheck
                             key={idx}
                             label={labels[idx]}
-                            checked={checkedVal}
+                            checked={uiChecked}
                             disabled={togglingThis}
                             onClick={() =>
                               toggleFetcher.submit(
@@ -382,7 +377,7 @@ export default function TodoPage() {
                                   intent: "toggle",
                                   id: t.id,
                                   index: String(idx),
-                                  value: String(!checkedVal),
+                                  value: String(!serverChecked),
                                 },
                                 { method: "post" }
                               )

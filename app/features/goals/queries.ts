@@ -23,3 +23,24 @@ export const getGoalList = async (client: SupabaseClient<Database> ,{ userId }:{
     return data;
 
 }
+
+export async function getGoalById(
+    client: SupabaseClient,
+    params: { userId: string; goalId: string }
+  ) {
+    const { userId, goalId } = params;
+  
+    const { data, error } = await client
+      .from("goals")
+      .select("*")
+      .eq("id", goalId)
+      .eq("profile_id", userId)
+      .single();
+  
+    if (error) {
+      console.error("[getGoalById] error:", error);
+      return null;
+    }
+  
+    return data;
+  }

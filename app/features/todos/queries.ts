@@ -1,55 +1,21 @@
-// import db from "~/db";
-// import { eq } from "drizzle-orm";
-// import { todo } from "../todos/schema";
-
 import { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "~/supa-client";
 
-// export const getTodoList = async (userId: string) => {
-//     const todos = await db
-//         .select({
-//             id: todo.id,
-//             text: todo.text,
-//             done: todo.done,
-//             created_at: todo.createdAt,
-//         })
-//         .from(todo)
-//         .where(eq(todo.profile_id, userId));
-//     return todos;
-// };
-
-
+// ✅ todo_list: 체크해도 created_at은 안 바뀌므로 ASC로 고정 추천(점프 최소화)
+// (지금 DESC라서 새로 추가된 건 위로 오지만, 체크 후 점프가 있으면 ASC가 더 안정적)
 export async function getTodoList(
-    client: SupabaseClient<Database>,
-    { userId }: { userId: string }
-  ) {
-    const { data, error } = await client
-      .from("todo_list")
-      .select("id, text, done, created_at")
-      .eq("profile_id", userId)
-      .order("created_at", { ascending: false });
-  
-    if (error) throw new Error(error.message);
-    return data ?? [];
-  }
+  client: SupabaseClient<Database>,
+  { userId }: { userId: string }
+) {
+  const { data, error } = await client
+    .from("todo_list")
+    .select("id, text, done, created_at")
+    .eq("profile_id", userId)
+    .order("created_at", { ascending: true }); // ✅ 안정(고정 순서)
 
-
-// export const getTodoList = async (client: SupabaseClient<Database> ,{ userId }:{userId: string}) => {
-
-//     const {data, error } = await client.from("todo_list_test_view").select(`
-//         id, 
-//         text, 
-//         done`).eq("profile_id", userId);
-   
-
-//     if(error) throw new Error(error.message);
-
-//     return data;
-
-// }
-
-
-
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
 
 export type WeeklyTodoRow = {
   id: string;
@@ -68,17 +34,50 @@ export type WeeklyTodoRow = {
   updated_at: string;
 };
 
+// ✅ 서울 기준 "이번 주 월~일" (date-only)
+function toISODate(d: Date) {
+  return d.toISOString().slice(0, 10);
+}
+function getSeoulWeekRangeISO() {
+  const now = new Date();
+  const seoulMs = now.getTime() + 9 * 60 * 60 * 1000;
+  const seoul = new Date(seoulMs);
+
+  const day = seoul.getUTCDay(); // 0(일)~6(토)
+  const diffToMonday = (day + 6) % 7;
+
+  const monday = new Date(seoulMs);
+  monday.setUTCDate(seoul.getUTCDate() - diffToMonday);
+
+  const sunday = new Date(monday.getTime());
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+
+  return {
+    period_start: toISODate(monday),
+    period_end: toISODate(sunday),
+  };
+}
+
 export async function getWeeklyTodos(
   client: SupabaseClient<Database>,
   { userId }: { userId: string }
 ) {
+  const { period_start, period_end } = getSeoulWeekRangeISO();
+
   const { data, error } = await client
     .from("weekly_todos")
     .select(
       "id,title,period_start,period_end,check_0,check_1,check_2,check_3,check_4,check_5,check_6,promoted_to_core,created_at,updated_at"
     )
     .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+    // ✅ 이번 주만 가져오기 (재렌더/점프 줄임)
+    .eq("period_start", period_start)
+    .eq("period_end", period_end)
+    // ✅ 체크해도 안 바뀌는 값으로 정렬 고정
+    .order("created_at", { ascending: true })
+    // ✅ created_at이 동일할 때도 순서 고정(가능하면)
+    // supabase는 2차 order도 지원함
+    .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
   return (data ?? []) as WeeklyTodoRow[];
