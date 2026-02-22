@@ -50,15 +50,22 @@ export async function getGoalById(
 // 네 프로젝트 구조에 맞게 파일 위치는 조정해도 돼.
 
 export async function getProfileByUserId(
-  client: any,
+  client: SupabaseClient<Database>,
   { userId }: { userId: string }
-): Promise<{ role: string | null } | null> {
+): Promise<
+  Pick<
+    Database["public"]["Tables"]["profiles"]["Row"],
+    "profile_id" | "todo_style" | "motivation_type" | "ai_styles" | "task_count" | "headline" | "bio" | "avatar" | "name" | "username"
+  > | null
+> {
   const { data, error } = await client
     .from("profiles")
-    .select("role")
-    .eq("id", userId)
+    .select(
+      "profile_id, todo_style, motivation_type, ai_styles, task_count, headline, bio, avatar, name, username"
+    )
+    .eq("profile_id", userId)
     .maybeSingle();
 
-  if (error) throw error;
+  if (error) throw new Error(error.message);
   return data ?? null;
 }

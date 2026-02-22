@@ -20,16 +20,17 @@ import {
   AlertDialogTrigger,
 } from "~/common/components/ui/alert-dialog";
 
-import { getWeeklyTodos } from "./queries";
+import { getWeeklyTodos, type WeeklyTodoRow } from "./queries";
 import {
   createWeeklyTodo,
   promoteWeeklyTodoToCore,
   rolloverExpiredWeeklyTodos,
   toggleWeeklyTodoCheck,
+  toggleWeeklyTodoCompleted, // ✅ mutations.ts에 있어야 함
 } from "./mutations";
 import { deleteWeeklyTodoWithCore } from "./mutations";
 
-function countChecks(t: any) {
+function countChecks(t: WeeklyTodoRow) {
   return [
     t.check_0,
     t.check_1,
@@ -48,6 +49,22 @@ function getRollingDowLabels(periodStart: string) {
   const start = new Date(y, m - 1, d);
   const startDay = start.getDay();
   return Array.from({ length: 7 }, (_, i) => DOW[(startDay + i) % 7]);
+}
+
+// ✅ 완료된 항목은 맨 아래로
+function sortTodos(list: WeeklyTodoRow[]) {
+  return [...list].sort((a, b) => {
+    if (Boolean(a.is_completed) !== Boolean(b.is_completed)) {
+      return a.is_completed ? 1 : -1; // 완료(true) -> 아래
+    }
+
+    // 같은 그룹 내에서는 기존 쿼리 정렬(ASC)을 유지하고 싶으면 아래처럼:
+    const at = a.created_at ? Date.parse(a.created_at) : 0;
+    const bt = b.created_at ? Date.parse(b.created_at) : 0;
+    if (at !== bt) return at - bt;
+
+    return String(a.id).localeCompare(String(b.id));
+  });
 }
 
 export const loader = async ({ request }: Route.LoaderArgs) => {
@@ -77,53 +94,50 @@ export const action = async ({ request }: Route.ActionArgs) => {
     if (intent === "add") {
       const title = String(fd.get("title") ?? "").trim();
       if (!title) {
-        return data(
-          { ok: false, message: "Title required" },
-          { headers, status: 400 }
-        );
+        return data({ ok: false, message: "Title required" }, { headers, status: 400 });
       }
       await createWeeklyTodo(client, { userId: user.id, title });
-      return data({ ok: true }, { headers });
+      return data({ ok: true, intent }, { headers });
     }
 
     if (intent === "delete") {
       const id = String(fd.get("id") ?? "");
       await deleteWeeklyTodoWithCore(client, { userId: user.id, id });
-      return data({ ok: true }, { headers });
+      return data({ ok: true, intent, id }, { headers });
     }
 
     if (intent === "toggle") {
       const id = String(fd.get("id") ?? "");
       const index = Number(fd.get("index") ?? -1);
       const value = String(fd.get("value") ?? "") === "true";
+
       if (!(index >= 0 && index <= 6)) {
-        return data(
-          { ok: false, message: "Invalid index" },
-          { headers, status: 400 }
-        );
+        return data({ ok: false, message: "Invalid index" }, { headers, status: 400 });
       }
+
       await toggleWeeklyTodoCheck(client, { userId: user.id, id, index, value });
-      return data({ ok: true }, { headers });
+      return data({ ok: true, intent, id, index, value }, { headers });
+    }
+
+    // ✅ Todo(한 줄) 전체 완료/취소
+    if (intent === "complete") {
+      const id = String(fd.get("id") ?? "");
+      const value = String(fd.get("value") ?? "") === "true";
+      await toggleWeeklyTodoCompleted(client, { userId: user.id, id, value });
+      return data({ ok: true, intent, id, value }, { headers });
     }
 
     if (intent === "promote") {
       const id = String(fd.get("id") ?? "");
       await promoteWeeklyTodoToCore(client, { userId: user.id, id });
-      return data({ ok: true }, { headers });
+      return data({ ok: true, intent, id }, { headers });
     }
 
-    return data(
-      { ok: false, message: "Unknown intent" },
-      { headers, status: 400 }
-    );
+    return data({ ok: false, message: "Unknown intent" }, { headers, status: 400 });
   } catch (e: any) {
-    return data(
-      { ok: false, message: e?.message ?? "Action failed" },
-      { headers, status: 400 }
-    );
+    return data({ ok: false, message: e?.message ?? "Action failed" }, { headers, status: 400 });
   }
 };
-
 
 function MiniDayCheck({
   label,
@@ -141,30 +155,21 @@ function MiniDayCheck({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={cn(
-        "group relative flex flex-col items-center gap-1 select-none",
-        disabled && "opacity-60 cursor-not-allowed"
-      )}
+      className={cn("group relative flex flex-col items-center gap-1 select-none", disabled && "opacity-60 cursor-not-allowed")}
       aria-label={`Day ${label}`}
     >
       <span
         className={cn(
           "h-7 w-7 rounded-full border flex items-center justify-center transition",
           "hover:shadow-sm",
-          // ✅ 여기: 체크됐을 때 indigo 톤
-          checked
-            ? "bg-indigo-500 border-indigo-500"
-            : "bg-background border-muted-foreground/30",
-          // ✅ 포커스 링도 indigo
+          checked ? "bg-indigo-500 border-indigo-500" : "bg-background border-muted-foreground/30",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2"
         )}
       >
         <span
           className={cn(
             "h-2 w-2 rounded-full transition",
-            checked
-              ? "bg-indigo-50"
-              : "bg-muted-foreground/30 group-hover:bg-muted-foreground/50"
+            checked ? "bg-indigo-50" : "bg-muted-foreground/30 group-hover:bg-muted-foreground/50"
           )}
         />
       </span>
@@ -175,32 +180,37 @@ function MiniDayCheck({
 }
 
 export default function TodoPage() {
-  const { todos } = useLoaderData<typeof loader>();
+  const { todos } = useLoaderData<typeof loader>() as { todos: WeeklyTodoRow[] };
   const [title, setTitle] = React.useState("");
 
-  const addFetcher = useFetcher();
-  const deleteFetcher = useFetcher();
-  const toggleFetcher = useFetcher();
-  const promoteFetcher = useFetcher();
+  // ✅ 로더 값 → 로컬 상태로 유지 (완료 표시 유지의 핵심)
+  const [todosState, setTodosState] = React.useState<WeeklyTodoRow[]>(() => sortTodos(todos ?? []));
+
+  React.useEffect(() => {
+    setTodosState(sortTodos(todos ?? []));
+  }, [todos]);
+
+  const addFetcher = useFetcher<any>();
+  const deleteFetcher = useFetcher<any>();
+  const toggleFetcher = useFetcher<any>();
+  const promoteFetcher = useFetcher<any>();
+  const completeFetcher = useFetcher<any>();
 
   const isAdding = addFetcher.state !== "idle";
 
   const deletingId =
-    deleteFetcher.state !== "idle"
-      ? String(deleteFetcher.formData?.get("id") ?? "")
-      : "";
+    deleteFetcher.state !== "idle" ? String(deleteFetcher.formData?.get("id") ?? "") : "";
 
   const togglingKey =
     toggleFetcher.state !== "idle"
-      ? `${String(toggleFetcher.formData?.get("id") ?? "")}:${String(
-          toggleFetcher.formData?.get("index") ?? ""
-        )}`
+      ? `${String(toggleFetcher.formData?.get("id") ?? "")}:${String(toggleFetcher.formData?.get("index") ?? "")}`
       : "";
 
   const promotingId =
-    promoteFetcher.state !== "idle"
-      ? String(promoteFetcher.formData?.get("id") ?? "")
-      : "";
+    promoteFetcher.state !== "idle" ? String(promoteFetcher.formData?.get("id") ?? "") : "";
+
+  const completingId =
+    completeFetcher.state !== "idle" ? String(completeFetcher.formData?.get("id") ?? "") : "";
 
   const submitAdd = () => {
     const v = title.trim();
@@ -209,7 +219,7 @@ export default function TodoPage() {
     setTitle("");
   };
 
-  // ✅ OPTIMISTIC: 토글 제출 중이면 그 값(value)을 UI에 즉시 반영
+  // ✅ OPTIMISTIC: 체크 토글 중이면 UI 즉시 반영
   const pendingToggle =
     toggleFetcher.state !== "idle"
       ? {
@@ -218,6 +228,62 @@ export default function TodoPage() {
           value: String(toggleFetcher.formData?.get("value") ?? ""),
         }
       : null;
+
+  // ✅ complete 성공 시: 로컬 상태에 반영 + 정렬(완료면 맨 아래)
+  React.useEffect(() => {
+    if (completeFetcher.state !== "idle") return;
+    if (!completeFetcher.data) return;
+    if (completeFetcher.data.ok !== true || completeFetcher.data.intent !== "complete") return;
+
+    const id = String(completeFetcher.data.id ?? "");
+    const value = Boolean(completeFetcher.data.value);
+
+    if (!id) return;
+
+    setTodosState((prev) => sortTodos(prev.map((t) => (t.id === id ? { ...t, is_completed: value } : t))));
+  }, [completeFetcher.state, completeFetcher.data]);
+
+  // ✅ delete 성공 시 로컬 제거
+  React.useEffect(() => {
+    if (deleteFetcher.state !== "idle") return;
+    if (!deleteFetcher.data) return;
+    if (deleteFetcher.data.ok !== true || deleteFetcher.data.intent !== "delete") return;
+
+    const id = String(deleteFetcher.data.id ?? "");
+    if (!id) return;
+
+    setTodosState((prev) => prev.filter((t) => t.id !== id));
+  }, [deleteFetcher.state, deleteFetcher.data]);
+
+  // ✅ toggle 성공 시 로컬 반영(유지)
+  React.useEffect(() => {
+    if (toggleFetcher.state !== "idle") return;
+    if (!toggleFetcher.data) return;
+    if (toggleFetcher.data.ok !== true || toggleFetcher.data.intent !== "toggle") return;
+
+    const id = String(toggleFetcher.data.id ?? "");
+    const index = Number(toggleFetcher.data.index ?? -1);
+    const value = Boolean(toggleFetcher.data.value);
+    if (!id || index < 0 || index > 6) return;
+
+    const col = `check_${index}` as keyof WeeklyTodoRow;
+
+    setTodosState((prev) =>
+      prev.map((t) => (t.id === id ? ({ ...t, [col]: value } as WeeklyTodoRow) : t))
+    );
+  }, [toggleFetcher.state, toggleFetcher.data]);
+
+  // ✅ promote 성공 시 로컬 반영
+  React.useEffect(() => {
+    if (promoteFetcher.state !== "idle") return;
+    if (!promoteFetcher.data) return;
+    if (promoteFetcher.data.ok !== true || promoteFetcher.data.intent !== "promote") return;
+
+    const id = String(promoteFetcher.data.id ?? "");
+    if (!id) return;
+
+    setTodosState((prev) => prev.map((t) => (t.id === id ? { ...t, promoted_to_core: true } : t)));
+  }, [promoteFetcher.state, promoteFetcher.data]);
 
   return (
     <div className="min-h-screen">
@@ -243,61 +309,79 @@ export default function TodoPage() {
             {isAdding ? "추가중.." : "추가"}
           </Button>
         </div>
-        {isAdding ? (
-          <p className="mt-2 text-xs text-muted-foreground">추가중..</p>
-        ) : null}
 
         <Separator className="my-4" />
 
         {/* List */}
         <div className="grid gap-3">
-          {todos.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-10">
-              Nothing here 🎉
-            </div>
+          {todosState.length === 0 ? (
+            <div className="text-sm text-muted-foreground text-center py-10">Nothing here 🎉</div>
           ) : (
-            todos.map((t: any) => {
+            todosState.map((t) => {
               const checked = countChecks(t);
-              const canPromote = checked >= 5 && !t.promoted_to_core;
+              const canPromote = checked >= 5 && !t.promoted_to_core && !t.is_completed;
+
               const rowDeleting = deletingId === t.id;
+              const rowCompleting = completingId === t.id;
 
               const labels = getRollingDowLabels(String(t.period_start));
 
               return (
-                <div key={t.id} className="border rounded-xl px-4 py-4">
+                <div key={t.id} className={cn("border rounded-xl px-4 py-4", t.is_completed && "opacity-70")}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium break-words">{t.title}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {t.period_start} ~ {t.period_end} · {checked}/7
-                        {t.promoted_to_core ? " · ✅ Core 등록됨" : ""}
+                      <div className={cn("font-medium break-words", t.is_completed && "line-through text-muted-foreground")}>
+                        {t.title}
+                      </div>
+
+                      <div className="mt-1 text-xs text-muted-foreground flex flex-wrap items-center gap-2">
+                        <span>
+                          {t.period_start} ~ {t.period_end} · {checked}/7
+                        </span>
+
+                        {t.is_completed ? (
+                          <span className="px-2 py-0.5 rounded-full border text-[10px]">✅ 완료</span>
+                        ) : null}
+
+                        {t.promoted_to_core ? (
+                          <span className="px-2 py-0.5 rounded-full border text-[10px]">✅ Core 등록됨</span>
+                        ) : null}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* ✅ Todo 전체 완료/취소 */}
+                      <Button
+                        size="sm"
+                        variant={t.is_completed ? "secondary" : "default"}
+                        onClick={() =>
+                          completeFetcher.submit(
+                            { intent: "complete", id: t.id, value: String(!t.is_completed) },
+                            { method: "post" }
+                          )
+                        }
+                        disabled={rowDeleting || rowCompleting}
+                        title={t.is_completed ? "완료 취소" : "이 Todo를 완료 처리"}
+                      >
+                        {rowCompleting ? "처리중.." : t.is_completed ? "완료됨" : "완료"}
+                      </Button>
+
+                      {/* ✅ Core List 만들기 -> 습관 형성 */}
                       {canPromote ? (
                         <Button
                           size="sm"
-                          onClick={() =>
-                            promoteFetcher.submit(
-                              { intent: "promote", id: t.id },
-                              { method: "post" }
-                            )
-                          }
-                          disabled={promotingId === t.id}
+                          onClick={() => promoteFetcher.submit({ intent: "promote", id: t.id }, { method: "post" })}
+                          disabled={promotingId === t.id || rowDeleting}
                         >
-                          {promotingId === t.id ? "생성중.." : "Core List 만들기"}
+                          {promotingId === t.id ? "생성중.." : "습관 형성"}
                         </Button>
                       ) : null}
 
+                      {/* 삭제 */}
                       {t.promoted_to_core ? (
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              disabled={rowDeleting}
-                            >
+                            <Button variant="ghost" size="sm" disabled={rowDeleting}>
                               {rowDeleting ? "삭제중.." : "삭제"}
                             </Button>
                           </AlertDialogTrigger>
@@ -315,12 +399,7 @@ export default function TodoPage() {
                             <AlertDialogFooter>
                               <AlertDialogCancel>취소</AlertDialogCancel>
                               <AlertDialogAction
-                                onClick={() =>
-                                  deleteFetcher.submit(
-                                    { intent: "delete", id: t.id },
-                                    { method: "post" }
-                                  )
-                                }
+                                onClick={() => deleteFetcher.submit({ intent: "delete", id: t.id }, { method: "post" })}
                               >
                                 삭제할게
                               </AlertDialogAction>
@@ -331,12 +410,7 @@ export default function TodoPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            deleteFetcher.submit(
-                              { intent: "delete", id: t.id },
-                              { method: "post" }
-                            )
-                          }
+                          onClick={() => deleteFetcher.submit({ intent: "delete", id: t.id }, { method: "post" })}
                           disabled={rowDeleting}
                         >
                           {rowDeleting ? "삭제중.." : "삭제"}
@@ -349,29 +423,27 @@ export default function TodoPage() {
                   <div className="mt-4 flex items-center justify-between">
                     <div className="flex gap-3">
                       {Array.from({ length: 7 }).map((_, idx) => {
-                        const col = `check_${idx}` as keyof typeof t;
+                        const col = `check_${idx}` as keyof WeeklyTodoRow;
                         const serverChecked = Boolean(t[col]);
 
                         const key = `${t.id}:${idx}`;
                         const togglingThis = togglingKey === key;
 
-                        // ✅ OPTIMISTIC: 현재 제출 중인 그 버튼이면 formData의 value로 UI 표시
                         const isThisPending =
                           pendingToggle &&
                           pendingToggle.id === String(t.id) &&
                           pendingToggle.index === String(idx);
 
-                        const uiChecked = isThisPending
-                          ? pendingToggle!.value === "true"
-                          : serverChecked;
+                        const uiChecked = isThisPending ? pendingToggle.value === "true" : serverChecked;
 
                         return (
                           <MiniDayCheck
                             key={idx}
                             label={labels[idx]}
                             checked={uiChecked}
-                            disabled={togglingThis}
-                            onClick={() =>
+                            disabled={t.is_completed || togglingThis}
+                            onClick={() => {
+                              if (t.is_completed) return;
                               toggleFetcher.submit(
                                 {
                                   intent: "toggle",
@@ -380,8 +452,8 @@ export default function TodoPage() {
                                   value: String(!serverChecked),
                                 },
                                 { method: "post" }
-                              )
-                            }
+                              );
+                            }}
                           />
                         );
                       })}
@@ -399,25 +471,19 @@ export default function TodoPage() {
 
         {/* 에러 출력 */}
         {"data" in addFetcher && (addFetcher.data as any)?.ok === false ? (
-          <p className="mt-4 text-sm text-red-500">
-            {(addFetcher.data as any)?.message}
-          </p>
+          <p className="mt-4 text-sm text-red-500">{(addFetcher.data as any)?.message}</p>
         ) : null}
         {"data" in deleteFetcher && (deleteFetcher.data as any)?.ok === false ? (
-          <p className="mt-2 text-sm text-red-500">
-            {(deleteFetcher.data as any)?.message}
-          </p>
+          <p className="mt-2 text-sm text-red-500">{(deleteFetcher.data as any)?.message}</p>
         ) : null}
         {"data" in toggleFetcher && (toggleFetcher.data as any)?.ok === false ? (
-          <p className="mt-2 text-sm text-red-500">
-            {(toggleFetcher.data as any)?.message}
-          </p>
+          <p className="mt-2 text-sm text-red-500">{(toggleFetcher.data as any)?.message}</p>
         ) : null}
-        {"data" in promoteFetcher &&
-        (promoteFetcher.data as any)?.ok === false ? (
-          <p className="mt-2 text-sm text-red-500">
-            {(promoteFetcher.data as any)?.message}
-          </p>
+        {"data" in completeFetcher && (completeFetcher.data as any)?.ok === false ? (
+          <p className="mt-2 text-sm text-red-500">{(completeFetcher.data as any)?.message}</p>
+        ) : null}
+        {"data" in promoteFetcher && (promoteFetcher.data as any)?.ok === false ? (
+          <p className="mt-2 text-sm text-red-500">{(promoteFetcher.data as any)?.message}</p>
         ) : null}
       </main>
     </div>

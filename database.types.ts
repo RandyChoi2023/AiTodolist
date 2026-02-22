@@ -478,6 +478,7 @@ export type Database = {
           core_list_id: string | null
           created_at: string
           id: string
+          is_completed: boolean | null
           period_end: string
           period_start: string
           promoted_to_core: boolean
@@ -497,6 +498,7 @@ export type Database = {
           core_list_id?: string | null
           created_at?: string
           id?: string
+          is_completed?: boolean | null
           period_end: string
           period_start: string
           promoted_to_core?: boolean
@@ -516,6 +518,7 @@ export type Database = {
           core_list_id?: string | null
           created_at?: string
           id?: string
+          is_completed?: boolean | null
           period_end?: string
           period_start?: string
           promoted_to_core?: boolean
@@ -539,6 +542,7 @@ export type Database = {
         Row: {
           avatar: string | null
           last_message: string | null
+          last_message_at: string | null
           name: string | null
           other_profile_id: string | null
           profile_id: string | null

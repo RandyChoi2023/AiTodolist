@@ -29,6 +29,10 @@ export type WeeklyTodoRow = {
   check_4: boolean;
   check_5: boolean;
   check_6: boolean;
+
+  // ✅ 추가: Todo(한 줄) 전체 완료 여부
+  is_completed: boolean;
+
   promoted_to_core: boolean;
   created_at: string;
   updated_at: string;
@@ -67,7 +71,8 @@ export async function getWeeklyTodos(
   const { data, error } = await client
     .from("weekly_todos")
     .select(
-      "id,title,period_start,period_end,check_0,check_1,check_2,check_3,check_4,check_5,check_6,promoted_to_core,created_at,updated_at"
+      // ✅ is_completed 포함 (완료 표시 유지의 핵심)
+      "id,title,period_start,period_end,check_0,check_1,check_2,check_3,check_4,check_5,check_6,is_completed,promoted_to_core,created_at,updated_at"
     )
     .eq("user_id", userId)
     // ✅ 이번 주만 가져오기 (재렌더/점프 줄임)
@@ -76,9 +81,23 @@ export async function getWeeklyTodos(
     // ✅ 체크해도 안 바뀌는 값으로 정렬 고정
     .order("created_at", { ascending: true })
     // ✅ created_at이 동일할 때도 순서 고정(가능하면)
-    // supabase는 2차 order도 지원함
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []) as WeeklyTodoRow[];
+
+  // ✅ DB에서 null로 올 수도 있으면 방어 (migration 직후/기존 데이터)
+  const safe = (data ?? []).map((row: any) => ({
+    ...row,
+    is_completed: Boolean(row?.is_completed),
+    promoted_to_core: Boolean(row?.promoted_to_core),
+    check_0: Boolean(row?.check_0),
+    check_1: Boolean(row?.check_1),
+    check_2: Boolean(row?.check_2),
+    check_3: Boolean(row?.check_3),
+    check_4: Boolean(row?.check_4),
+    check_5: Boolean(row?.check_5),
+    check_6: Boolean(row?.check_6),
+  }));
+
+  return safe as WeeklyTodoRow[];
 }

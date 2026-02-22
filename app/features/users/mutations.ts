@@ -5,15 +5,23 @@ import type { Database } from "~/supa-client";
 
 // all the mutations for the users features
 
+
 export async function updateUserProfile(
   client: SupabaseClient<Database>,
   profileId: string,
   patch: {
     name: string; // ✅ 필수
     username: string; // ✅ 필수
+    headline?: string | null;
     bio?: string | null;
-    avatar?: string | null; // ✅ 아바타는 명시적으로 보낼 때만 반영
+
+    // ✅ 아바타는 명시적으로 보낼 때만 반영
+    avatar?: string | null;
+
     todo_style?: Database["public"]["Enums"]["todo_style"] | null;
+    motivation_type?: Database["public"]["Enums"]["motivation_type"] | null;
+    ai_styles?: Database["public"]["Enums"]["ai_styles"] | null;
+    task_count?: Database["public"]["Enums"]["task_count"] | null;
   }
 ) {
   type ProfileInsert = Database["public"]["Tables"]["profiles"]["Insert"];
@@ -24,8 +32,14 @@ export async function updateUserProfile(
     profile_id: profileId,
     name: patch.name,
     username: patch.username,
+    headline: patch.headline ?? null,
     bio: patch.bio ?? null,
+
     todo_style: patch.todo_style ?? null,
+    motivation_type: patch.motivation_type ?? null,
+    ai_styles: patch.ai_styles ?? null,
+    task_count: patch.task_count ?? null,
+
     updated_at: new Date().toISOString(),
   };
 
@@ -48,7 +62,6 @@ export async function updateUserProfile(
   return data;
 }
 
-  
   export async function updateUserAvatar(
     client: SupabaseClient<Database>,
     profileId: string,

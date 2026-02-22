@@ -8,3 +8,7 @@ ALTER TABLE "notifications" ADD COLUMN "seen" boolean DEFAULT false NOT NULL;-->
 ALTER TABLE "todo_list" ADD CONSTRAINT "todo_list_profile_id_profiles_profile_id_fk" FOREIGN KEY ("profile_id") REFERENCES "public"."profiles"("profile_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "todo_list" DROP COLUMN "createdAt";--> statement-breakpoint
 CREATE POLICY "core-tasks-insert-policy" ON "core_tasks" AS PERMISSIVE FOR INSERT TO "authenticatedRole" WITH CHECK ((auth.uid()) = (SELECT user_id FROM goals WHERE id = "core_tasks"."goal_id"));
+
+
+alter table weekly_todos
+add column is_completed boolean default false;

@@ -262,3 +262,25 @@ export async function promoteWeeklyTodoToCore(
     if (updErr) throw new Error(updErr.message);
   }
 }
+
+
+export async function toggleWeeklyTodoCompleted(
+  client: SupabaseClient<Database>,
+  {
+    userId,
+    id,
+    value,
+  }: { userId: string; id: string; value: boolean }
+) {
+
+  const { error } = await client
+    .from("weekly_todos")
+    .update({
+      is_completed: value,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("user_id", userId);
+
+  if (error) throw new Error(error.message);
+}
