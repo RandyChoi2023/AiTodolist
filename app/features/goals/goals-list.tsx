@@ -65,14 +65,17 @@ function getSeoulWeekRangeISO() {
     period_end: toISODate(sunday),
   };
 }
-function getAiReadyStorageKey() {
+
+// ✅ userId를 포함해 계정별로 localStorage 분리
+function getAiReadyStorageKey(userId: string) {
   const { period_start, period_end } = getSeoulWeekRangeISO();
-  return `aiReadyGoals:${period_start}~${period_end}`;
+  return `aiReadyGoals:${userId}:${period_start}~${period_end}`;
 }
-function loadAiReadyGoalIds(): Set<string> {
+
+function loadAiReadyGoalIds(userId: string): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = window.localStorage.getItem(getAiReadyStorageKey());
+    const raw = window.localStorage.getItem(getAiReadyStorageKey(userId));
     if (!raw) return new Set();
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return new Set();
@@ -81,10 +84,11 @@ function loadAiReadyGoalIds(): Set<string> {
     return new Set();
   }
 }
-function saveAiReadyGoalIds(next: Set<string>) {
+
+function saveAiReadyGoalIds(userId: string, next: Set<string>) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(getAiReadyStorageKey(), JSON.stringify(Array.from(next)));
+    window.localStorage.setItem(getAiReadyStorageKey(userId), JSON.stringify(Array.from(next)));
   } catch {
     // ignore
   }
@@ -98,7 +102,7 @@ export const loader = async ({ request }: Route.LoaderArgs) => {
   const userId = await getLoggedInUserId(client);
 
   const goals = await getGoalList(client, { userId });
-  return data({ goals }, { headers });
+  return data({ goals, userId }, { headers });
 };
 
 /**
@@ -190,7 +194,7 @@ export const action = async ({ request }: Route.ActionArgs) => {
 };
 
 export default function GoalsListPage() {
-  const { goals } = useLoaderData<typeof loader>();
+  const { goals, userId } = useLoaderData<typeof loader>();
   const navigate = useNavigate();
 
   const createFetcher = useFetcher<typeof action>();
@@ -209,8 +213,8 @@ export default function GoalsListPage() {
 
   const [lastToggle, setLastToggle] = React.useState<{ goalId: string; nextStatus: GoalStatus } | null>(null);
 
-  // ✅ localStorage 복원(주간 단위)
-  const [aiReadyGoalIds, setAiReadyGoalIds] = React.useState<Set<string>>(() => loadAiReadyGoalIds());
+  // ✅ localStorage 복원(주간 + userId 단위)
+  const [aiReadyGoalIds, setAiReadyGoalIds] = React.useState<Set<string>>(() => loadAiReadyGoalIds(userId));
   const [aiPendingGoalId, setAiPendingGoalId] = React.useState<string | null>(null);
 
   const [goalsState, setGoalsState] = React.useState<Goal[]>(
@@ -306,11 +310,11 @@ export default function GoalsListPage() {
       const goalId = deleteFetcher.data.goalId;
       setGoalsState((prev) => prev.filter((g) => g.id !== goalId));
 
-      // localStorage 상태도 같이 정리
+      // ✅ localStorage 상태도 같이 정리
       setAiReadyGoalIds((prev) => {
         const next = new Set(prev);
         next.delete(goalId);
-        saveAiReadyGoalIds(next);
+        saveAiReadyGoalIds(userId, next);
         return next;
       });
 
@@ -325,14 +329,14 @@ export default function GoalsListPage() {
       setAiReadyGoalIds((prev) => {
         const next = new Set(prev);
         ids.forEach((id) => next.delete(id));
-        saveAiReadyGoalIds(next);
+        saveAiReadyGoalIds(userId, next);
         return next;
       });
 
       if (aiPendingGoalId && ids.has(aiPendingGoalId)) setAiPendingGoalId(null);
       return;
     }
-  }, [deleteFetcher.state, deleteFetcher.data, aiPendingGoalId]);
+  }, [deleteFetcher.state, deleteFetcher.data, aiPendingGoalId, userId]);
 
   // ✅ toggle 처리
   React.useEffect(() => {
@@ -377,11 +381,11 @@ export default function GoalsListPage() {
       setAiReadyGoalIds((prev) => {
         const next = new Set(prev);
         next.add(gid);
-        saveAiReadyGoalIds(next);
+        saveAiReadyGoalIds(userId, next);
         return next;
       });
     }
-  }, [aiFetcher.state, aiFetcher.data, aiPendingGoalId]);
+  }, [aiFetcher.state, aiFetcher.data, aiPendingGoalId, userId]);
 
   function toggleDone(id: string) {
     const current = goalsState.find((g) => g.id === id);
@@ -528,8 +532,12 @@ export default function GoalsListPage() {
                       {g.why ? <div className="text-xs text-muted-foreground mt-1 break-words">{g.why}</div> : null}
 
                       <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
-                        {g.category ? <span className="px-2 py-0.5 rounded-full border text-muted-foreground">{g.category}</span> : null}
-                        {g.target ? <span className="px-2 py-0.5 rounded-full border text-muted-foreground">{g.target}</span> : null}
+                        {g.category ? (
+                          <span className="px-2 py-0.5 rounded-full border text-muted-foreground">{g.category}</span>
+                        ) : null}
+                        {g.target ? (
+                          <span className="px-2 py-0.5 rounded-full border text-muted-foreground">{g.target}</span>
+                        ) : null}
                         <span className="px-2 py-0.5 rounded-full border">{isDone ? "Done" : "Active"}</span>
                       </div>
                     </div>
@@ -547,17 +555,17 @@ export default function GoalsListPage() {
                           isDone
                             ? "목표가 달성 되었어요!"
                             : weekQuotaReached
-                              ? `이번 주 AI 생성 한도(${MAX_AI_GOALS_PER_WEEK})를 다 썼어`
-                              : "AI가 할 일 정리해줘요"
+                            ? `이번 주 AI 생성 한도(${MAX_AI_GOALS_PER_WEEK})를 다 썼어`
+                            : "AI가 할 일 정리해줘요"
                         }
                       >
                         {aiPending
                           ? "AI가 생성 중..."
                           : aiReady
-                            ? "AI 생성 완료"
-                            : weekQuotaReached
-                              ? "이번 주 한도 초과"
-                              : "AI가 할 일 정리해줘요"}
+                          ? "AI 생성 완료"
+                          : weekQuotaReached
+                          ? "이번 주 한도 초과"
+                          : "AI가 할 일 정리해줘요"}
                       </Button>
 
                       {aiReady ? (
@@ -571,7 +579,13 @@ export default function GoalsListPage() {
                       ) : null}
                     </div>
 
-                    <Button type="button" variant="ghost" size="sm" onClick={() => requestDeleteGoal(g.id)} disabled={isDeleting}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => requestDeleteGoal(g.id)}
+                      disabled={isDeleting}
+                    >
                       삭제
                     </Button>
                   </div>

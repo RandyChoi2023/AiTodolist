@@ -191,19 +191,34 @@ export async function createTodoistByAI(
   return data ?? [];
 }
 
+function getWeekRangeUTC(now = new Date()) {
+  // UTC 기준 월요일 시작
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = d.getUTCDay(); // 0=Sun,1=Mon...
+  const diffToMon = (day + 6) % 7; // Mon=0 ... Sun=6
+  d.setUTCDate(d.getUTCDate() - diffToMon);
+  d.setUTCHours(0, 0, 0, 0);
+
+  const start = d;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 7);
+
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+}
+
 export async function countWeeklyTodosForThisWeek(
-  client: SupabaseClient<Database>,
+  client: any,
   { userId }: { userId: string }
 ) {
-  const { period_start, period_end } = getSeoulWeekRangeISO();
+  const { startISO, endISO } = getWeekRangeUTC();
 
   const { count, error } = await client
     .from("weekly_todos")
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("period_start", period_start)
-    .eq("period_end", period_end);
+    .eq("user_id", userId)                // ✅ 회원별 필터 (이게 핵심)
+    .gte("created_at", startISO)          // ✅ 이번주 시작
+    .lt("created_at", endISO);            // ✅ 이번주 끝(미포함)
 
-  if (error) throw new Error(error.message);
+  if (error) throw error;
   return count ?? 0;
 }

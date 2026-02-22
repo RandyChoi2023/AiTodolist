@@ -44,3 +44,21 @@ export async function getGoalById(
   
     return data;
   }
+
+
+  // features/goals/queries.ts (예시)
+// 네 프로젝트 구조에 맞게 파일 위치는 조정해도 돼.
+
+export async function getProfileByUserId(
+  client: any,
+  { userId }: { userId: string }
+): Promise<{ role: string | null } | null> {
+  const { data, error } = await client
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data ?? null;
+}
